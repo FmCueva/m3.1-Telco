@@ -1,0 +1,14 @@
+dist/
+coverage/
+node_modules/
+package-lock.json
+*.md
+ops/
+specs/
+plan/
+prompts/
+.github/
+migrations/
+# Ficheros existentes formateados con otro ancho: no se reformatean (regla del repo).
+src/domain/serviceTransitions.ts
+tests/unit/serviceTransitions.test.ts

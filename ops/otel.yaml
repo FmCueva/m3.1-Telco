@@ -1,0 +1,39 @@
+# ops/otel.yaml — config mínima del OpenTelemetry Collector (contrib 0.95).
+# Recibe OTLP de la api, exporta trazas a Jaeger (servicio `jaeger` del compose)
+# y expone las métricas en formato Prometheus en :8889, donde las scrapea el
+# servicio `prometheus` del compose (ops/prometheus.yml).
+#
+# Nota honesta para el alumno: docker-compose.yml monta este fichero en
+# /etc/otelcol-contrib/config.yaml, la ruta que la imagen contrib lee por
+# defecto. El collector arranca con ESTA config, sin `command:` extra.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889 # lo scrapea el servicio prometheus del compose
+  debug: {}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]

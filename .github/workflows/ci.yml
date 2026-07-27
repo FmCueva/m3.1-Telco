@@ -1,0 +1,97 @@
+# Pipeline CI que bloquea cambios incorrectos (marco común del bloque).
+# Gates: lint + npm audit → fronteras de módulos → unit (matriz) → cobertura ≥80% →
+#        contract + e2e → DoD → docker build → gate de tamaño + trivy (0 CRITICAL/HIGH).
+# Si cualquier gate falla, NO se mergea. El pipeline no negocia.
+
+name: ci
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm audit --audit-level=high   # SCA: cero HIGH/CRITICAL conocidas en dependencias
+      - run: npm run lint                      # eslint + prettier --check
+      - run: npx depcruise src --validate      # fronteras de módulos (ADR-001)
+
+  test:
+    needs: lint
+    strategy:
+      matrix:
+        node: [20, 22]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ matrix.node }}', cache: npm }
+      - run: npm ci
+      - run: npm run test:unit -- --coverage
+      - name: Gate de cobertura ≥ 80 %
+        run: npx tsx scripts/coverage-gate.ts 80
+
+  contract:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: test }
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-retries 10
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run migrate && npm run test:contract
+        env:
+          DATABASE_URL: postgres://postgres:test@localhost:5432/postgres
+      - run: npm run test:e2e                  # punta de la pirámide: flujo feliz completo
+
+  dod:
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: DoD ejecutable del JOB en curso
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }} # vía env: nunca interpolar input no confiable en run
+        run: npx tsx scripts/check-dod.ts "$PR_TITLE"
+      - name: Gate de trazabilidad — cero AC sin test (el gate definitivo)
+        run: bash scripts/check-ac-coverage.sh
+
+  docker:
+    needs: dod
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: >
+          docker build
+          --build-arg GIT_SHA=${{ github.sha }}
+          --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          -t telco-api:${{ github.sha }} .
+      - name: Gate de tamaño — el presupuesto del propio Dockerfile (< 100 MB)
+        run: |
+          size=$(docker image inspect telco-api:${{ github.sha }} --format '{{.Size}}')
+          echo "imagen: $((size / 1024 / 1024)) MB (presupuesto 100 MB)"
+          [ "$size" -le $((100 * 1024 * 1024)) ] || exit 1
+      - name: Trivy — la imagen también cumple su spec
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: telco-api:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'          # 1 HIGH/CRITICAL = build roto

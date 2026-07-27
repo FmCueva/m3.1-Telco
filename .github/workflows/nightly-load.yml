@@ -1,0 +1,28 @@
+# Load test nightly del NFR-PERF-001 (SRS §4: verificación "load test en CI nightly").
+# Workflow SEPARADO de ci.yml: la carga no debe alargar cada PR; el NFR se vigila cada noche.
+name: nightly-load
+on:
+  schedule:
+    - cron: '0 3 * * *' # cada noche a las 03:00 UTC
+  workflow_dispatch: {} # y a demanda, para la demo y para el alumno
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Arrancar la API (persistencia en memoria, cero servicios externos)
+        run: |
+          npx tsx src/server.ts &
+          for i in $(seq 1 30); do
+            curl -fs http://localhost:8080/healthz && break
+            sleep 1
+          done
+      - name: NFR-PERF-001 — p95 < 200 ms sostenido a 100 req/s
+        run: npx tsx scripts/load-test.ts 30

@@ -1,0 +1,14 @@
+# ops/prometheus.yml — Prometheus del entorno de demo.
+# Carga las reglas de ops/alerts.yml: la alerta del GameDay (IncidentManualQueueSaturated)
+# se evalúa aquí, reproducible por el alumno con `docker compose up`.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: otel-collector # las métricas de la api llegan vía OTLP → collector → aquí
+    static_configs:
+      - targets: ['otel:8889']

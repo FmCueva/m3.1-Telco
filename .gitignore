@@ -1,0 +1,5 @@
+# Ojo: .env y .secrets/ NO se ignoran a propósito — son dummies de demo que
+# el alumno necesita clonados para que `docker compose config` pase.
+node_modules/
+dist/
+coverage/

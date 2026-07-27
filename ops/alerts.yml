@@ -1,0 +1,46 @@
+# Alertas con runbook enlazado en el payload (Módulo Operación, vídeo 3).
+groups:
+  - name: telco-slo
+    rules:
+      - alert: IncidentsBurnRateHigh
+        # ¿Estoy quemando >2% del error budget de SLO-2 en 1h?
+        # Umbral = 2% del budget de 28 d (672 h) consumido en 1 h:
+        #   0.02 × 672 × 0.005 ≈ 0.0672  (a 1 000 RPS ≈ 67 req/s con error)
+        expr: |
+          (
+            sum(rate(http_requests_total{route="/incidents", method="POST", code=~"5.."}[1h]))
+            /
+            sum(rate(http_requests_total{route="/incidents", method="POST", code!~"4.."}[1h]))
+          ) > 0.02 * 672 * 0.005
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Burn rate alto en POST /incidents'
+          runbook_url: 'https://runbooks.master-ia.dev/telco/incidents-burn-rate'
+
+      - alert: IncidentManualQueueSaturated
+        expr: incidents_manual_review_queue_size > 50
+        # GameDay de 30 min: detección rápida (la hipótesis exige disparo < 2 min).
+        # En producción real se usaría una ventana mayor (p. ej. 10m).
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Cola MANUAL_REVIEW saturada ({{ $value }} incidencias)'
+          runbook_url: 'https://runbooks.master-ia.dev/telco/cola-incidencias?value={{ $value }}'
+
+      - alert: AiCostBudgetExceeded
+        # sum by (le): imprescindible para que la quantile sobreviva a >1 instancia
+        expr: histogram_quantile(0.95, sum by (le) (rate(ai_cost_per_incident_eur_bucket[1h]))) > 0.01
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Coste IA p95 por incidencia fuera de presupuesto (NFR-COST-001)'
+          runbook_url: 'https://runbooks.master-ia.dev/telco/ai-cost'
+
+      - alert: AuditLogIncomplete
+        expr: audit_log_completeness < 0.999
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Sugerencias de IA sin decisión humana registrada (INV-6 violado)'
+          runbook_url: 'https://runbooks.master-ia.dev/telco/audit-gap'

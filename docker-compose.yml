@@ -1,0 +1,48 @@
+# Entorno de desarrollo: api + postgres + collector OTel + jaeger + prometheus.
+# La api espera a que la DB esté sana (healthcheck encadenado, Módulo Plataforma).
+services:
+  api:
+    build: .
+    ports: ['8080:8080']
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+
+  db:
+    image: postgres:16
+    volumes: [pgdata:/var/lib/postgresql/data]
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
+      interval: 5s
+      retries: 10
+    networks: [internal]
+    secrets: [db_password]
+
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    volumes: ['./ops/otel.yaml:/etc/otelcol-contrib/config.yaml'] # ruta que la imagen lee por defecto
+    networks: [internal]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    ports: ['16686:16686']
+    networks: [internal]
+
+  # Evalúa las mismas alertas del GameDay (ops/alerts.yml): reproducible con `docker compose up`.
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports: ['9090:9090']
+    volumes:
+      - './ops/prometheus.yml:/etc/prometheus/prometheus.yml'
+      - './ops/alerts.yml:/etc/prometheus/alerts.yml'
+    networks: [internal]
+
+volumes: { pgdata: {} }
+networks: { internal: { driver: bridge } }
+secrets:
+  db_password:
+    file: ./.secrets/db_password
