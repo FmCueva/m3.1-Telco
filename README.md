@@ -312,3 +312,13 @@ docker compose up                      # entorno completo local
 > Los archivos `.env` y `.secrets/` incluidos son **valores dummy de demo** para que
 > `docker compose` arranque en local. En un proyecto real **no se commitean**: los secretos viven en
 > un gestor (Vault, SOPS, secrets del CI).
+
+<!-- BEGIN cc:que-se-valora -->
+¡Hola! Aquí te explico en qué nos fijamos cuando corregimos tu proyecto P1 - Telco, para que sepas qué aspectos son los más importantes.
+
+## 📋 Qué se valora
+
+Nos fijamos mucho en que hayas definido bien el problema antes de empezar a solucionarlo, eso es importante. Pero, lo que más pesa de todo, es que podamos seguir el hilo de tu solución desde el principio hasta el final, viendo cómo cada parte contribuye al objetivo. También es importante que se vea claramente qué partes ha generado la inteligencia artificial y cuáles has decidido tú como humano. Otro punto importante es que demuestres que entiendes bien el dominio del problema y que tus soluciones son coherentes. Además, valoramos bastante que hayas automatizado la verificación de tu trabajo y que tengas "gates" para asegurar la calidad. Por último, aunque con un peso menor, nos interesa ver tu vídeo explicando tu método y mostrando una demo de tu proyecto.
+
+Recuerda que el detalle de lo que se pide está en el enunciado del proyecto, y la evaluación no penaliza por cosas que no se hayan solicitado allí.
+<!-- END cc:que-se-valora -->
