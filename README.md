@@ -102,6 +102,7 @@ orden exacto de uso**:
 | 2 | [`02-spec-invariantes.md`](./prompts/02-spec-invariantes.md) | Cap. 3 | Spec + invariantes + máquina de estados → `specs/spec-servicio.md` |
 | 3 | [`03-plan-jobs.md`](./prompts/03-plan-jobs.md) | Cap. 4 | Plan de construcción (fases → jobs → tareas) → `plan/jobs.yaml` |
 | 4 | [`04-tdd-transiciones.md`](./prompts/04-tdd-transiciones.md) | Cap. 5 | Tests primero (rojo) → implementación (verde) |
+| 4b | [`045-capa-http.md`](./prompts/045-capa-http.md) | Cap. 5 | Capa HTTP: Fastify + OpenAPI + store |
 | 5 | [`05-contract-tests.md`](./prompts/05-contract-tests.md) | Cap. 5 | Tests de contrato del API |
 | 6 | [`06-clasificador-incidencias.md`](./prompts/06-clasificador-incidencias.md) | Cap. 7 | Clasificador IA bajo control + presupuesto de tokens |
 
