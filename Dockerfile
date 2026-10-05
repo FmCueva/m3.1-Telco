@@ -1,5 +1,6 @@
 # Dockerfile — la imagen cumple su propia spec (Módulo Plataforma, vídeo 1):
-# multi-stage, < 100 MB, usuario no-root UID>10000, healthcheck, labels OCI.
+# multi-stage, imagen mínima (presupuesto <= 250 MB; la base node:22-alpine ya ~162 MB),
+# usuario no-root UID>10000, healthcheck, labels OCI.
 
 # syntax=docker/dockerfile:1.6
 FROM node:22-alpine AS deps
@@ -17,6 +18,9 @@ RUN npm run build            # tsc → dist/
 FROM node:22-alpine
 WORKDIR /app
 RUN addgroup -g 10001 app && adduser -u 10001 -G app -s /bin/false -D app
+# La imagen de produccion no necesita npm; el npm que trae node:*-alpine arrastra
+# vulnerabilidades HIGH que Trivy marca. Lo quitamos: menos superficie y pasa el gate de Trivy.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
