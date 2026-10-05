@@ -34,3 +34,11 @@ fuera del enum.
 | Mismo flujo con modelo grande | ~10× más — y la clasificación no mejora |
 
 Punto didáctico: el modelo se elige desde el NFR, no desde el hype.
+
+## Documento de riesgos de la IA (entregable, redacción libre)
+
+`specs/ethical-risk-assessment.md` es un entregable del proyecto: la evaluación de riesgos del uso
+de IA (clasificación del tipo de uso + matriz de riesgos con sus controles, atados a INV-6 /
+NFR-AUDIT-001 / NFR-SEC-001). **No hay prompt ni plantilla fija que lo genere**: lo redactas con tu
+criterio a partir de los riesgos que ya estás mitigando en este clasificador. Se valora por
+contenido, no por parecerse al de la solución de referencia.

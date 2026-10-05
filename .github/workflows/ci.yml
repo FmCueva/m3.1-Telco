@@ -84,11 +84,11 @@ jobs:
           --build-arg GIT_SHA=${{ github.sha }}
           --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           -t telco-api:${{ github.sha }} .
-      - name: Gate de tamaño — el presupuesto del propio Dockerfile (< 100 MB)
+      - name: Gate de tamaño — el presupuesto del propio Dockerfile (< 250 MB)
         run: |
           size=$(docker image inspect telco-api:${{ github.sha }} --format '{{.Size}}')
-          echo "imagen: $((size / 1024 / 1024)) MB (presupuesto 100 MB)"
-          [ "$size" -le $((100 * 1024 * 1024)) ] || exit 1
+          echo "imagen: $((size / 1024 / 1024)) MB (presupuesto 250 MB)"
+          [ "$size" -le $((250 * 1024 * 1024)) ] || exit 1
       - name: Trivy — la imagen también cumple su spec
         uses: aquasecurity/trivy-action@v0.36.0
         with:

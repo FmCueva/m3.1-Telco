@@ -135,6 +135,9 @@ el artefacto en verde.
   (`isActive`, `isSuspended`) → permite estados imposibles. La decisión correcta es un **tipo cerrado
   (union type) + tabla de transiciones**. `CANCELLED` es terminal.
 - **Artefacto:** `specs/spec-servicio.md` + `specs/ethical-risk-assessment.md` (riesgos de la IA).
+  El doc de riesgos es de **redacción libre** (no hay plantilla ni prompt que lo genere): se valora
+  por contenido —clasificación del uso de IA + controles atados a INV-6 / NFR-AUDIT-001 / NFR-SEC-001—,
+  no por parecerse a la versión de la solución.
 
 ### Cap. 4 — Arquitectura derivada y plan de construcción → `specs/adr/` + `plan/jobs.yaml`
 - **Qué haces (a mano):** escribes los **ADR** — decisiones de arquitectura. *"¿Qué requisito te
@@ -153,10 +156,17 @@ el artefacto en verde.
 - **Artefacto:** `src/domain/serviceTransitions.ts`, `src/api/`, y `tests/unit` + `tests/contract`
   en verde.
 
-### Cap. 6 — Pipeline de CI que bloquea → `.github/workflows/ci.yml` + `Dockerfile`
+### Cap. 6 — Pipeline de CI que bloquea → `.gitlab-ci.yml` (GitLab) · `.github/workflows/ci.yml` · `Dockerfile`
 - **Qué haces:** el CI es **infraestructura**: lo **coges del repo y lo adaptas** (no hay prompt de
   CI). Lees el pipeline gate por gate: lint, complejidad, `npm audit`, **dependency-cruiser**
   (la "policía" del ADR-001), cobertura ≥ 80 %, DoD.
+- **Dónde corre de verdad:** el campus usa **GitLab**, no GitHub Actions. Tienes un `.gitlab-ci.yml`
+  de partida equivalente, adaptado al runner del campus (`cloudrun-ephemeral`): executor *shell* con
+  Node 22 y **sin Docker ni `services:`**, así que PostgreSQL se instala dentro del job y todos los
+  jobs llevan el tag `cloudrun`. El job `docker` queda en aviso (`allow_failure`) mientras no haya
+  runner con Docker/buildah — **no penaliza**.
+- **Nota de tamaño:** el gate de la imagen es **≤ 250 MB** (la base `node:22-alpine` ya pesa ~162 MB
+  sin comprimir, así que bajar de 100 MB con Node no es posible).
 - **Lo que sí es tuyo, a mano:** los scripts de gate (`scripts/coverage-gate.ts`, `check-dod.ts`).
 - **La demo clave:** abres un PR que viola un invariante → **el pipeline bloquea el merge**. El "no"
   de la máquina no se negocia en una reunión.
@@ -213,11 +223,12 @@ del proyecto **terminado**: 📦 = ya viene en este repo (infra); 🛠️ = lo c
 │
 ├── scripts/                    #    DoD ejecutable, gate de cobertura, migraciones, load-test
 │
-├── .github/workflows/          5 · Infra de CI (se hereda y se adapta)             (cap. 6)
+├── .gitlab-ci.yml              #    Pipeline en GitLab (donde corre de verdad, cloudrun)   (cap. 6)
+├── .github/workflows/          5 · Infra de CI (referencia de gates; GitHub Actions)  (cap. 6)
 │   ├── ci.yml                  #    El pipeline que BLOQUEA merges incorrectos
 │   └── nightly-load.yml        #    Prueba de carga nocturna
 │
-├── Dockerfile                  #    Imagen que cumple su spec (no-root, healthcheck, <100 MB)
+├── Dockerfile                  #    Imagen que cumple su spec (no-root, healthcheck, <=250 MB)
 ├── docker-compose.yml          #    api · postgres · otel · jaeger · prometheus
 │
 └── ops/                        6 · Observabilidad y operación                       (cap. 8)
@@ -302,7 +313,7 @@ docker compose up                      # entorno completo local
 | Observabilidad | OpenTelemetry → Jaeger (trazas) + Prometheus (métricas) |
 | Tests | Vitest + cobertura v8 |
 | Calidad | ESLint + Prettier + dependency-cruiser |
-| Empaquetado | Docker multi-stage (<100 MB, no-root, healthcheck) |
+| Empaquetado | Docker multi-stage (<=250 MB, no-root, healthcheck) |
 
 ## Requisitos
 
