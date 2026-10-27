@@ -20,7 +20,7 @@ default:
     key: { files: [package-lock.json] }
     paths: [.npm/]
   before_script:
-    - node --version                       # el runner trae Node 22, que es el del proyecto
+    - node --version # el runner trae Node 22, que es el del proyecto
     - npm ci --cache .npm --prefer-offline
 
 # PostgreSQL real dentro del job (el runner shell ignora `services:`).
@@ -38,16 +38,16 @@ default:
 lint:
   stage: lint
   script:
-    - npm audit --audit-level=high         # SCA: cero HIGH/CRITICAL conocidas
-    - npm run lint                         # eslint + prettier --check
-    - npx depcruise src --validate         # fronteras de módulos (ADR-001)
+    - npm audit --audit-level=high # SCA: cero HIGH/CRITICAL conocidas
+    - npm run lint # eslint + prettier --check
+    - npx depcruise src --validate # fronteras de módulos (ADR-001)
 
 test:
   stage: test
   needs: [lint]
   script:
     - npm run test:unit -- --coverage
-    - npx tsx scripts/coverage-gate.ts 80  # gate de cobertura >= 80 %
+    - npx tsx scripts/coverage-gate.ts 80 # gate de cobertura >= 80 %
   coverage: '/All files\s*\|\s*([\d.]+)/'
   artifacts:
     when: always
@@ -59,19 +59,19 @@ contract:
   needs: [test]
   script:
     - npm run migrate && npm run test:contract
-    - npm run test:e2e                     # punta de la pirámide: flujo feliz completo
+    - npm run test:e2e # punta de la pirámide: flujo feliz completo
 
 dod:
   stage: dod
   needs: [contract]
   variables:
-    PR_TITLE: $CI_MERGE_REQUEST_TITLE      # vía variable: nunca interpolar input no confiable
+    PR_TITLE: $CI_MERGE_REQUEST_TITLE # vía variable: nunca interpolar input no confiable
   script:
     - |
       if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
         npx tsx scripts/check-dod.ts "$PR_TITLE"
       fi
-    - bash scripts/check-ac-coverage.sh    # gate de trazabilidad — cero AC sin test
+    - bash scripts/check-ac-coverage.sh # gate de trazabilidad — cero AC sin test
 
 # El runner cloudrun no tiene Docker: este job fallará ahí (allow_failure → aviso, no rojo).
 # Cuando la plataforma habilite un runner con Docker/buildah, quitar `allow_failure`.
