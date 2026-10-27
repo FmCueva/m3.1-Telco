@@ -1,0 +1,183 @@
+# Plan de construcción TELCO — borrador generado por IA (prompt 03, segunda versión), pendiente de revisión humana.
+# Deriva de: specs/srs-telco.md, specs/spec-servicio.md, specs/adr/ADR-001 y ADR-002.
+# Estructura: fase -> JOBs (slices verticales de punta a punta) -> tareas.
+# Las tareas (horas) van dentro del JOB y solo se detallan para el JOB que se implementa a continuación (JOB-002).
+# Camino crítico: JOB-001 -> JOB-002 -> JOB-004 -> JOB-005 -> JOB-006 -> JOB-008
+# (JOB-003 cuelga de JOB-001 y bloquea a JOB-004; JOB-007 corre en paralelo a JOB-006).
+
+fase:
+  id: MVP-TELCO
+  name: MVP del backend de operadora
+  duration: 1 semana
+  jobs: [JOB-001, JOB-002, JOB-003, JOB-004, JOB-005, JOB-006, JOB-007, JOB-008]
+  quality_gate_fase:
+    - "CI en verde: lint (Prettier + ESLint), tests, dependency-cruiser, gate de cobertura y gate de trazabilidad."
+    - "Cobertura de líneas >= 80 % (NFR-QUAL-001)."
+    - "Los 5 criterios AC-TELCO-001 a AC-TELCO-005 tienen al menos un test etiquetado y en verde."
+    - "Todo test lleva una etiqueta @AC-TELCO-nnn."
+    - "Todo JOB traza a al menos un requisito del SRS."
+    - "0 apariciones de PII en los logs del flujo completo (NFR-AUDIT-001)."
+    - "p95 < 200 ms a 50 req/s durante 60 s en las operaciones sin IA (NFR-PERF-001)."
+    - "Imagen de contenedor <= 250 MB y usuario no-root."
+    - "2 SLOs vigentes en ops/slos.md, con alerta y runbook_url enlazado."
+    - "Un GameDay documentado con el ciclo degradación -> alerta -> runbook -> mitigación -> verificación."
+
+jobs:
+  - id: JOB-001
+    name: Walking skeleton + CI
+    owner: Fernando
+    priority: Must
+    requirements: [NFR-QUAL-001]
+    dependencies: []
+    deliverables:
+      - "package.json, tsconfig.json (TypeScript ESM, Node 22), configuración de Vitest, ESLint y Prettier."
+      - "src/api/server.ts: servidor Fastify con GET /health, desplegable en contenedor."
+      - "Esqueleto de módulos src/customers, src/contracts, src/incidents y src/ai, cada uno con su index.ts público."
+      - ".dependency-cruiser.cjs con la regla de imports solo vía index.ts (ADR-001)."
+      - "scripts/coverage-gate.ts y scripts/check-ac-coverage.sh."
+      - ".github/workflows/ci.yml con los gates (heredado y adaptado del repo)."
+      - "Dockerfile (usuario no-root) y docker-compose.yml."
+    acceptance:
+      - "GET /health responde HTTP 200 desde el contenedor levantado con docker-compose."
+      - "Un import que salte el index.ts público de un módulo hace fallar dependency-cruiser en CI."
+      - "El pipeline de CI falla si la cobertura de líneas es < 80 %."
+      - "El pipeline de CI falla si existe un test sin etiqueta @AC-TELCO-nnn."
+      - "La imagen de contenedor pesa <= 250 MB y se ejecuta con usuario no-root."
+
+  - id: JOB-002
+    name: Máquina de estados del servicio, de dominio a API
+    owner: Fernando
+    priority: Must
+    requirements: [FR-DOM-005, FR-DOM-006, FR-DOM-007, FR-DOM-008, FR-DOM-012]
+    dependencies: [JOB-001]
+    deliverables:
+      - "src/domain/service-state.ts: tipos ServiceState y ServiceEvent (union types cerrados), tabla VALID_TRANSITIONS, función transition() e InvalidTransitionError."
+      - "src/domain/index.ts público del dominio."
+      - "POST /contracts/:id/events (módulo contracts) para los eventos CONFIRM_CONTRACT y CANCEL, con InvalidTransitionError traducido a HTTP 409."
+      - "Persistencia del estado del servicio en PostgreSQL y migración de la tabla de contratos."
+    acceptance:
+      - "ServiceState tiene exactamente los cinco valores DRAFT, PENDING_INSTALLATION, ACTIVE, SUSPENDED y CANCELLED; el compilador rechaza cualquier otro valor (INV-1)."
+      - "VALID_TRANSITIONS contiene exactamente las 8 transiciones de la sección 1.2 de la spec."
+      - "Las 8 combinaciones válidas devuelven el estado destino esperado."
+      - "Las 17 combinaciones restantes de las 25 estado × evento lanzan InvalidTransitionError (INV-2)."
+      - "Los 5 eventos sobre CANCELLED lanzan InvalidTransitionError, incluido CANCEL (INV-3, @AC-TELCO-002)."
+      - "transition() no modifica el estado de entrada cuando lanza error."
+      - "Ningún archivo de src/domain/ importa módulos de base de datos ni de red."
+      - "POST /contracts/:id/events con CONFIRM_CONTRACT sobre un servicio en DRAFT devuelve HTTP 200 y el estado persistido es PENDING_INSTALLATION."
+      - "POST /contracts/:id/events con CANCEL sobre un servicio en DRAFT, PENDING_INSTALLATION, ACTIVE o SUSPENDED devuelve HTTP 200 y el estado persistido es CANCELLED."
+      - "POST /contracts/:id/events con cualquier evento sobre un servicio CANCELLED devuelve HTTP 409 y el estado persistido no cambia (@AC-TELCO-002)."
+      - "La capa de API no contiene reglas de negocio: solo traduce HTTP a llamadas de dominio."
+    tasks: # nivel 3 (fases -> trabajos -> tareas): solo se detalla el JOB que se implementa a continuación
+      - tipos ServiceState y ServiceEvent, e InvalidTransitionError (2 h)
+      - tabla VALID_TRANSITIONS: tests de las 8 válidas primero en rojo (2 h)
+      - tests de las 25 combinaciones (17 inválidas y CANCELLED terminal), primero en rojo (2 h)
+      - implementar transition() mínima hasta verde (1 h)
+      - pureza del dominio con dependency-cruiser y export público en index.ts (1 h)
+      - persistencia del estado y migración de la tabla de contratos (2 h)
+      - endpoint POST /contracts/:id/events, capa delgada que traduce a 409 (2 h)
+      - contract tests del endpoint (2 h)
+
+  - id: JOB-003
+    name: Alta de cliente con KYC
+    owner: Fernando
+    priority: Must
+    requirements: [FR-DOM-001, FR-DOM-002]
+    dependencies: [JOB-001]
+    deliverables:
+      - "POST /customers (módulo customers) con persistencia en PostgreSQL y migración de la tabla de clientes."
+      - "Endpoint de recepción del resultado KYC del proveedor (ruta a decidir en la revisión; la spec no la define)."
+    acceptance:
+      - "POST /customers con nombre, documento de identidad y teléfono devuelve HTTP 201 y un customer_id opaco."
+      - "POST /customers con cualquier dato obligatorio ausente devuelve HTTP 400."
+      - "Todo cliente nuevo queda con KYC PENDING."
+      - "El KYC solo pasa a VERIFIED o REJECTED al recibir el resultado del proveedor."
+      - "Los logs del alta no contienen nombre, teléfono ni documento (INV-7)."
+
+  - id: JOB-004
+    name: Contratación de servicio con KYC verificado
+    owner: Fernando
+    priority: Must
+    requirements: [FR-DOM-003, FR-DOM-004]
+    dependencies: [JOB-002, JOB-003]
+    deliverables:
+      - "POST /contracts (módulo contracts) que crea el servicio en DRAFT."
+    acceptance:
+      - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 422 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
+      - "POST /contracts con tipo FIBER, MOBILE o PACK para un cliente VERIFIED devuelve HTTP 201 y el servicio queda persistido en DRAFT."
+      - "POST /contracts con cualquier otro tipo devuelve HTTP 400."
+      - "Un contrato creado con POST /contracts puede confirmarse con CONFIRM_CONTRACT y pasa a PENDING_INSTALLATION (flujo de punta a punta de JOB-003 a JOB-002)."
+
+  - id: JOB-005
+    name: Webhooks de instalación y facturación
+    owner: Fernando
+    priority: Must
+    requirements: [FR-DOM-009, FR-DOM-010, FR-DOM-011, NFR-SEC-001, NFR-PERF-001]
+    dependencies: [JOB-004]
+    deliverables:
+      - "Endpoint de webhook de instalación (INSTALLATION_COMPLETED)."
+      - "Endpoint de webhook de facturación (PAYMENT_DEFAULT y PAYMENT_REGULARIZED)."
+      - "Verificación de firma HMAC-SHA256 compartida por ambos webhooks."
+      - "scripts/load-test y job de CI con umbral de latencia sobre las operaciones sin IA."
+    acceptance:
+      - "INSTALLATION_COMPLETED con firma válida sobre un servicio PENDING_INSTALLATION devuelve HTTP 200 y el servicio pasa a ACTIVE (@AC-TELCO-001)."
+      - "PAYMENT_DEFAULT con firma válida sobre un servicio ACTIVE lo deja en SUSPENDED."
+      - "PAYMENT_REGULARIZED con firma válida sobre un servicio SUSPENDED lo deja en ACTIVE."
+      - "Cada webhook sobre un servicio fuera del estado de origen requerido devuelve HTTP 409."
+      - "Un webhook con firma ausente o inválida devuelve HTTP 401 y no altera ningún estado."
+      - "Con 50 peticiones por segundo sostenidas durante 60 s, el p95 de latencia es < 200 ms en las operaciones sin IA."
+      - "El job de CI de carga falla si el p95 es >= 200 ms."
+
+  - id: JOB-006
+    name: Incidencias y clasificador de IA bajo control humano
+    owner: Fernando
+    priority: Must
+    requirements: [FR-DOM-013, FR-DOM-014, NFR-AI-001, NFR-AUDIT-001]
+    dependencies: [JOB-004]
+    deliverables:
+      - "POST /incidents (módulo incidents), con HTTP 404 si el servicio no existe."
+      - "src/ai/classifyIncident.ts con salida validada con zod, cálculo y registro del coste por llamada, modelo haiku."
+      - "Cola de revisión manual (estado MANUAL_REVIEW)."
+      - "Endpoint de decisión del técnico (aceptar, modificar o rechazar) con registro de auditoría."
+    acceptance:
+      - "POST /incidents con cliente y servicio existentes devuelve HTTP 201 y un incident_id opaco."
+      - "Una sugerencia con confidence 0.55 deja la incidencia en MANUAL_REVIEW y no modifica ningún dato (INV-5, @AC-TELCO-004)."
+      - "Una sugerencia con confidence >= 0.8 y esquema válido queda pendiente de validación del técnico y no se aplica sola."
+      - "Una respuesta con JSON roto o fuera del esquema zod genera una incidencia en MANUAL_REVIEW sin lanzar excepción."
+      - "El coste por llamada se calcula y se registra como métrica en cada clasificación."
+      - "La decisión del técnico registra suggestion_id, identificador opaco del técnico, decisión y marca de tiempo (INV-6, @AC-TELCO-005)."
+      - "Cada sugerencia y cada decisión se registra con modelo, identificadores opacos y marca de tiempo; 0 apariciones de PII en los logs."
+      - "Los tests del clasificador corren con el SDK mockeado y consumen 0 tokens."
+      - "src/incidents no importa src/ai por dentro; solo por su index.ts (ADR-001)."
+
+  - id: JOB-007
+    name: Observabilidad mínima
+    owner: Fernando
+    priority: Should
+    requirements: [NFR-PERF-001, NFR-AUDIT-001]
+    dependencies: [JOB-005]   # corre en paralelo a JOB-006
+    deliverables:
+      - "Instrumentación OpenTelemetry (trazas y métricas) en el código, alineada con la configuración heredada en ops/otel.yaml."
+      - "Logs JSON estructurados con identificadores opacos."
+      - "ops/slos.md y ops/alerts.yml (heredados): revisados y adaptados por el humano al SRS de TELCO; se retiran o se sustituyen las referencias a requisitos que el SRS no define (NFR-DISP-001, NFR-COST-001) y se mantiene runbook_url en cada alerta."
+    acceptance:
+      - "Una petición POST /incidents genera una traza completa visible en el backend de trazas."
+      - "Las métricas de latencia por ruta se exponen y alimentan el SLI de latencia de ops/slos.md."
+      - "Cada alerta de ops/alerts.yml incluye una runbook_url que existe en el repo."
+      - "Ningún archivo de ops/ cita un ID de requisito que no exista en specs/srs-telco.md."
+      - "0 apariciones de PII en los logs JSON del flujo completo."
+
+  - id: JOB-008
+    name: Operación defendible (runbook + mini GameDay)
+    owner: Fernando
+    priority: Should
+    requirements: [NFR-AI-001, NFR-AUDIT-001]
+    dependencies: [JOB-006, JOB-007]
+    deliverables:
+      - "ops/runbook-cola-incidencias.md (heredado): revisado y adaptado por el humano a los nombres, estados y endpoints reales del sistema."
+      - "ops/gameday-01-proveedor-ia.md (heredado): revisado y adaptado por el humano, y ejecutado como GameDay de 30 min (caída del proveedor de IA)."
+      - "ops/postmortem-gameday-01.md (heredado): rellenado por el humano con los resultados reales del GameDay."
+    acceptance:
+      - "Con el proveedor de IA caído, las incidencias nuevas quedan en MANUAL_REVIEW y ninguna excepción llega al cliente."
+      - "La alerta del GameDay dispara y enlaza al runbook."
+      - "El GameDay deja registrado el ciclo degradación, alerta, runbook, mitigación y verificación."
+      - "Los pasos del runbook usan solo estados, rutas y métricas que existen en el código (MANUAL_REVIEW, POST /incidents, ai_*)."
