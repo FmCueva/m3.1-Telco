@@ -13,3 +13,29 @@ export type ServiceEvent =
   | 'paymentDefault'
   | 'paymentRegularized'
   | 'cancel';
+
+// Entidades que persiste el store. Solo datos: las reglas viven en el dominio.
+export type KycStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+export interface Customer {
+  id: string;
+  status: KycStatus;
+  outstandingDebt: number;
+}
+
+export type ContractType = 'FIBER' | 'MOBILE' | 'PACK';
+
+export interface ServiceContract {
+  id: string;
+  customerId: string;
+  type: ContractType;
+  status: ServiceStatus;
+}
+
+export type IncidentStatus = 'OPEN' | 'MANUAL_REVIEW' | 'RESOLVED';
+
+export interface Incident {
+  id: string;
+  contractId: string;
+  status: IncidentStatus;
+}

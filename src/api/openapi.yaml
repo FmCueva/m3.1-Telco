@@ -1,0 +1,261 @@
+openapi: 3.1.0
+info:
+  title: TELCO API
+  version: 0.1.0
+  description: >-
+    Contrato HTTP del backend TELCO. Documentación: no se sirve en runtime.
+    Todo error 4xx/5xx usa el shape uniforme { code, message }.
+paths:
+  /healthz:
+    get:
+      summary: Comprobación de salud
+      responses:
+        '200':
+          description: El servicio está vivo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+  /customers:
+    post:
+      summary: Alta de cliente (queda con KYC PENDING)
+      description: >-
+        Crea un cliente con KYC PENDING y deuda 0. El KYC se registra en otro
+        endpoint.
+      responses:
+        '201':
+          description: Cliente creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+  /customers/{id}/kyc:
+    post:
+      summary: Registra el resultado de la verificación KYC
+      description: cliente verificado o rechazado. El cliente debe existir.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result: { type: string, enum: [VERIFIED, REJECTED] }
+      responses:
+        '200':
+          description: Cliente con el KYC actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /customers/{id}:
+    get:
+      summary: Detalle del cliente con sus contratos
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Cliente y sus contratos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Customer' }
+                  - type: object
+                    required: [contracts]
+                    properties:
+                      contracts:
+                        type: array
+                        items: { $ref: '#/components/schemas/ServiceContract' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contracts:
+    post:
+      summary: Contrata un servicio (nace en DRAFT)
+      description: >-
+        Crea un contrato en DRAFT para un cliente existente. El cliente debe
+        existir y tener KYC VERIFIED y deuda 0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, type]
+              properties:
+                customerId: { type: string, minLength: 1 }
+                type: { $ref: '#/components/schemas/ContractType' }
+      responses:
+        '201':
+          description: Contrato creado en DRAFT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El cliente tiene deuda pendiente. code DEBT_OUTSTANDING
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { code: DEBT_OUTSTANDING, message: El cliente tiene deuda pendiente }
+        '403':
+          description: El cliente no tiene el KYC verificado (INV-4). code KYC_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { code: KYC_REQUIRED, message: El cliente no tiene el KYC verificado }
+  /contracts/{id}:
+    get:
+      summary: Detalle del contrato
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Contrato
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contracts/{id}/events:
+    post:
+      summary: Aplica un evento al contrato mediante transition(), evento sobre la máquina de estados.
+      description: >-
+        Aplica un evento al contrato mediante transition(). El contrato debe
+        existir. El evento debe ser válido según la tabla de transición de estados.
+        Una transición inválida devuelve error 409. Un contrato CANCELLED no puede recibir eventos (INV-3).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event]
+              properties:
+                event: { $ref: '#/components/schemas/ServiceEvent' }
+      responses:
+        '200':
+          description: Transición aplicada, Contrato actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Transición fuera de la tabla (INV-2) o contrato CANCELLED (INV-3).
+            El estado no cambia. code INVALID_TRANSITION
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  code: INVALID_TRANSITION,
+                  message: 'Transición inválida: confirm desde ACTIVE',
+                }
+  /incidents:
+    post:
+      summary: Abre una incidencia sobre un servicio (nace en OPEN)
+      description: >-
+        Crea una incidencia en OPEN para un contrato existente. El contrato debe
+        existir y no estar CANCELLED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractId]
+              properties:
+                contractId: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Incidencia creada en OPEN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El servicio está CANCELLED (INV-5). code SERVICE_CANCELLED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { code: SERVICE_CANCELLED, message: El servicio está CANCELLED }
+  /incidents/{id}/resolve:
+    post:
+      summary: Resolución de la incidencia por el técnico
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Incidencia resuelta (status RESOLVED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Incident' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    ValidationError:
+      description: Cuerpo inválido. code VALIDATION_ERROR
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Recurso inexistente (CUSTOMER_NOT_FOUND, CONTRACT_NOT_FOUND, INCIDENT_NOT_FOUND)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    ContractType:
+      type: string
+      enum: [FIBER, MOBILE, PACK]
+    ServiceStatus:
+      type: string
+      enum: [DRAFT, PENDING_INSTALLATION, ACTIVE, SUSPENDED, CANCELLED]
+    ServiceEvent:
+      type: string
+      enum: [confirm, installationCompleted, paymentDefault, paymentRegularized, cancel]
+    Customer:
+      type: object
+      required: [id, status, outstandingDebt]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [PENDING, VERIFIED, REJECTED] }
+        outstandingDebt: { type: number, minimum: 0 }
+    ServiceContract:
+      type: object
+      required: [id, customerId, type, status]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        type: { $ref: '#/components/schemas/ContractType' }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+    Incident:
+      type: object
+      required: [id, contractId, status]
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        status: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
