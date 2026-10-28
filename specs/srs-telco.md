@@ -1,5 +1,7 @@
 # SRS — Backend de operadora TELCO
 
+> **VERSIÓN: 1.1** · **ESTADO: VALIDADA** · Última actualización: 2026-10-27.
+
 ## 1. Propósito y alcance
 
 **Propósito.** Definir los requisitos del backend de una operadora de telecomunicaciones que gestiona el ciclo de vida completo: alta de clientes, verificación de identidad (KYC), contratación de servicios (fibra, móvil, packs), gestión del ciclo de vida del servicio e incidencias con clasificación asistida por IA, **siempre bajo validación humana**.
