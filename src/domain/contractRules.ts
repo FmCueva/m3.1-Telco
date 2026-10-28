@@ -1,4 +1,4 @@
-// src/domain/contractRules.ts — reglas de contratación e incidencias (spec 2.1, INV-4; deuda e incidencia sobre CANCELLED pendientes de spec).
+// src/domain/contractRules.ts — reglas de contratación e incidencias (spec 2.1, INV-4, INV-8, INV-9).
 // Dominio puro: sin IO. La API traduce el `code` de cada error a HTTP.
 
 import type { Customer, ServiceContract } from './types';

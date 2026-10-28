@@ -30,6 +30,10 @@ export class InMemoryStore {
     return [...this.contracts.values()].filter((c) => c.customerId === customerId);
   }
 
+  listIncidents(): Incident[] {
+    return [...this.incidents.values()];
+  }
+
   getIncident(id: string): Incident | undefined {
     return this.incidents.get(id);
   }

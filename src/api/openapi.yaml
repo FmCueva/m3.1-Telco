@@ -99,7 +99,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: El cliente tiene deuda pendiente. code DEBT_OUTSTANDING
+          description: El cliente tiene deuda pendiente (INV-8). code DEBT_OUTSTANDING
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -186,7 +186,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: El servicio está CANCELLED (INV-5). code SERVICE_CANCELLED
+          description: El servicio está CANCELLED (INV-9). code SERVICE_CANCELLED
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

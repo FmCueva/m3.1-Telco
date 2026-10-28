@@ -32,7 +32,7 @@ describe('POST /contracts', () => {
     expect(app.store.listContractsByCustomer(customer.id)).toEqual([]);
   });
 
-  // PENDIENTE: la spec no tiene AC para la deuda; declararlo y etiquetar este test.
+  // @AC-TELCO-006
   it('cliente con deuda → 409 DEBT_OUTSTANDING y no se crea ningún servicio', async () => {
     const customer = await seed.customer(app, {
       status: 'VERIFIED',
@@ -72,8 +72,10 @@ describe('POST /contracts/:id/events', () => {
 });
 
 describe('POST /incidents', () => {
-  // PENDIENTE: la spec no tiene AC para el 404 de incidencias; declararlo y etiquetar este test.
-  it('servicio inexistente → 404 con shape { code, message }', async () => {
+  // @AC-TELCO-008
+  it('servicio inexistente → 404 con shape { code, message } y no se crea incidencia', async () => {
+    const before = app.store.listIncidents().length;
+
     const res = await app.inject({
       method: 'POST',
       url: '/incidents',
@@ -85,5 +87,22 @@ describe('POST /incidents', () => {
       code: expect.any(String),
       message: expect.any(String),
     });
+    expect(app.store.listIncidents()).toHaveLength(before);
+  });
+
+  // @AC-TELCO-007
+  it('servicio CANCELLED → 409 SERVICE_CANCELLED y no se crea incidencia', async () => {
+    const contract = await seed.contract(app, { status: 'CANCELLED' });
+    const before = app.store.listIncidents().length;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/incidents',
+      payload: { contractId: contract.id },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'SERVICE_CANCELLED' });
+    expect(app.store.listIncidents()).toHaveLength(before);
   });
 });

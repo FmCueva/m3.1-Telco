@@ -8,12 +8,12 @@ tests/contract/contracts.api.test.ts (vitest + app.inject de Fastify) que verifi
 el CONTRATO HTTP, no la implementación:
 
 - POST /contracts con cliente sin KYC → 403 con code KYC_REQUIRED (INV-4)
-- POST /contracts con cliente con deuda → 409 DEBT_OUTSTANDING (regla pendiente de spec)
+- POST /contracts con cliente con deuda → 409 DEBT_OUTSTANDING (INV-8)
 - POST /contracts válido → 201 y status DRAFT
 - POST /contracts/:id/events con transición inválida → 409 INVALID_TRANSITION
   y el estado NO cambia (verifícalo con un GET posterior)
 - POST /contracts/:id/events sobre CANCELLED → 409 (INV-3)
-- POST /incidents sobre servicio CANCELLED → 409 (regla pendiente de spec)
+- POST /incidents sobre servicio CANCELLED → 409 SERVICE_CANCELLED (INV-9)
 - POST /incidents sobre servicio inexistente → 404
 
 Usa los helpers de tests/helpers/testApp.ts (DB efímera). Un describe por endpoint.

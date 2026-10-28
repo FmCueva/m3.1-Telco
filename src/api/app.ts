@@ -42,8 +42,8 @@ type IdParams = { id: string };
 function domainStatus(error: unknown): number | undefined {
   if (error instanceof InvalidTransitionError) return 409; // INV-2, INV-3
   if (error instanceof KycRequiredError) return 403; // INV-4
-  if (error instanceof DebtOutstandingError) return 409; // regla pendiente de spec (deuda)
-  if (error instanceof ServiceCancelledError) return 409; // regla pendiente de spec (incidencia sobre CANCELLED)
+  if (error instanceof DebtOutstandingError) return 409; // INV-8
+  if (error instanceof ServiceCancelledError) return 409; // INV-9
   return undefined;
 }
 
