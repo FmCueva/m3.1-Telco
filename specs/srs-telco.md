@@ -36,7 +36,7 @@
 |---|---|---|
 | FR-DOM-001 | El sistema permite dar de alta un cliente con los datos mínimos identificados (nombre, documento de identidad, teléfono de contacto) y devuelve un `customer_id` opaco; un alta con algún dato obligatorio ausente responde HTTP 400. | Must |
 | FR-DOM-002 | Todo cliente nuevo queda con estado KYC `PENDING`; solo pasa a `VERIFIED` o `REJECTED` al recibir el resultado del proveedor de verificación. | Must |
-| FR-DOM-003 | El sistema rechaza con HTTP 422 la contratación de un servicio para un cliente cuyo estado KYC no es `VERIFIED`. | Must |
+| FR-DOM-003 | El sistema rechaza con HTTP 403 la contratación de un servicio para un cliente cuyo estado KYC no es `VERIFIED`. | Must |
 | FR-DOM-004 | El sistema permite contratar un servicio de tipo `FIBER`, `MOBILE` o `PACK` para un cliente verificado y lo crea en estado `DRAFT`; cualquier otro tipo se rechaza con HTTP 400. | Must |
 | FR-DOM-005 | El estado del servicio es un tipo cerrado con exactamente cinco valores (`DRAFT`, `PENDING_INSTALLATION`, `ACTIVE`, `SUSPENDED`, `CANCELLED`); no existen indicadores booleanos de estado y no es posible persistir un valor fuera de ese conjunto. | Must |
 | FR-DOM-006 | Todo cambio de estado se realiza mediante una única función `transition()` que consulta una tabla de transiciones válidas; una transición no permitida lanza `InvalidTransitionError` y la API responde HTTP 409, dejando el estado sin cambios. | Must |

@@ -102,7 +102,7 @@ jobs:
     deliverables:
       - "POST /contracts (módulo contracts) que crea el servicio en DRAFT."
     acceptance:
-      - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 422 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
+      - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 403 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
       - "POST /contracts con tipo FIBER, MOBILE o PACK para un cliente VERIFIED devuelve HTTP 201 y el servicio queda persistido en DRAFT."
       - "POST /contracts con cualquier otro tipo devuelve HTTP 400."
       - "Un contrato creado con POST /contracts puede confirmarse con CONFIRM_CONTRACT y pasa a PENDING_INSTALLATION (flujo de punta a punta de JOB-003 a JOB-002)."

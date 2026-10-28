@@ -65,7 +65,7 @@ operación silenciosa sin efecto, y no existe ninguna transición que salga de `
 | INV-1 | El estado del servicio es siempre uno de los cinco valores del tipo cerrado; no existen indicadores booleanos de estado ni valores fuera del conjunto. | Unit test (el compilador rechaza valores fuera del tipo) y contract test (la API rechaza un estado desconocido). | FR-DOM-005 |
 | INV-2 | Todo cambio de estado pasa por la única función `transition()` y la tabla `VALID_TRANSITIONS`; una combinación fuera de la tabla lanza `InvalidTransitionError`, la API responde 409 y el estado queda sin cambios. | Unit test exhaustivo de las 25 combinaciones estado × evento (8 válidas, 17 → error) y contract test de HTTP 409. | FR-DOM-006 |
 | INV-3 | `CANCELLED` es terminal: ningún evento, incluido `CANCEL`, produce una transición desde `CANCELLED`. | Unit test (los 5 eventos sobre `CANCELLED` lanzan error) y contract test (409). | FR-DOM-007 |
-| INV-4 | No se crea un servicio para un cliente cuyo estado KYC no sea `VERIFIED`; la API responde 422. | Unit test de la regla y contract test de HTTP 422. | FR-DOM-003, FR-DOM-004 |
+| INV-4 | No se crea un servicio para un cliente cuyo estado KYC no sea `VERIFIED`; la API responde 403. | Unit test de la regla y contract test de HTTP 403. | FR-DOM-003, FR-DOM-004 |
 | INV-5 | Una sugerencia de la IA con `confidence < 0.8`, o con salida que no cumple el esquema `zod`, deja la incidencia en la cola de revisión manual `MANUAL_REVIEW`. | Unit test del clasificador con el SDK mockeado (0 tokens) en los casos de confianza baja y de JSON roto. | FR-DOM-014 |
 | INV-6 | La IA solo clasifica y sugiere: nunca modifica datos. La sugerencia solo se aplica tras una decisión humana, que se registra con `suggestion_id`, el identificador opaco del técnico, la decisión (aceptada, modificada o rechazada) y la marca de tiempo. | Unit test (el clasificador no escribe en ningún repositorio), contract test de la decisión y revisión de los registros de auditoría (NFR-AUDIT-001). | FR-DOM-014 |
 | INV-7 | Los registros y logs usan solo identificadores opacos (`customer_id: c-721`); ninguno contiene nombre, teléfono ni documento de identidad. | Test que inspecciona los logs del flujo completo (NFR-AUDIT-001). | NFR-AUDIT-001 |
@@ -102,7 +102,7 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
   Scenario: No se contrata sin KYC verificado
     Given un cliente con KYC en estado PENDING
     When el agente comercial intenta contratar un servicio FIBER
-    Then la respuesta es HTTP 422 y no se crea ningún servicio
+    Then la respuesta es HTTP 403 y no se crea ningún servicio
 
   @AC-TELCO-004
   Scenario: Confianza baja va a revisión manual
