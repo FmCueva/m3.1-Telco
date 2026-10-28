@@ -1,7 +1,7 @@
 # Spec — Ciclo de vida del servicio e incidencias con IA
 
 > **ESTADO: VALIDADA.** Deriva de `specs/srs-telco.md`: FR-DOM-004 a FR-DOM-012 (ciclo de vida del servicio) y FR-DOM-013 y
-> FR-DOM-014 (incidencias y clasificación por IA).
+> FR-DOM-014 (incidencias y clasificación por IA), más FR-DOM-015 y FR-DOM-016 (deuda y servicio CANCELLED).
 
 ## 1. Máquina de estados del servicio
 
@@ -69,6 +69,8 @@ operación silenciosa sin efecto, y no existe ninguna transición que salga de `
 | INV-5 | Una sugerencia de la IA con `confidence < 0.8`, o con salida que no cumple el esquema `zod`, deja la incidencia en la cola de revisión manual `MANUAL_REVIEW`. | Unit test del clasificador con el SDK mockeado (0 tokens) en los casos de confianza baja y de JSON roto. | FR-DOM-014 |
 | INV-6 | La IA solo clasifica y sugiere: nunca modifica datos. La sugerencia solo se aplica tras una decisión humana, que se registra con `suggestion_id`, el identificador opaco del técnico, la decisión (aceptada, modificada o rechazada) y la marca de tiempo. | Unit test (el clasificador no escribe en ningún repositorio), contract test de la decisión y revisión de los registros de auditoría (NFR-AUDIT-001). | FR-DOM-014 |
 | INV-7 | Los registros y logs usan solo identificadores opacos (`customer_id: c-721`); ninguno contiene nombre, teléfono ni documento de identidad. | Test que inspecciona los logs del flujo completo (NFR-AUDIT-001). | NFR-AUDIT-001 |
+| INV-8 | No se crea un servicio para un cliente con deuda pendiente mayor que 0; la API responde 409 con code `DEBT_OUTSTANDING`. | Unit test de la regla y contract test de HTTP 409. | FR-DOM-015 |
+| INV-9 | No se registra una incidencia sobre un servicio inexistente (HTTP 404) ni sobre un servicio `CANCELLED` (HTTP 409, code `SERVICE_CANCELLED`); en ambos casos no se crea la incidencia. | Unit test de la regla y contract test de HTTP 404 y 409. | FR-DOM-013, FR-DOM-016 |
 
 ### 2.1 Contratos de los endpoints clave (precondición · postcondición · invariantes)
 
@@ -77,9 +79,9 @@ ejecutables estas tres patas; aquí quedan nombradas por endpoint.
 
 | Endpoint | Precondición | Postcondición | Invariantes |
 |---|---|---|---|
-| `POST /contracts` | Cliente con KYC `VERIFIED`. | Contrato persistido en `DRAFT`. | INV-1, INV-4 |
+| `POST /contracts` | Cliente con KYC `VERIFIED` y sin deuda pendiente. | Contrato persistido en `DRAFT`. | INV-1, INV-4, INV-8 |
 | `POST /contracts/:id/events` | La transición (estado, evento) está en la tabla. | Estado actualizado. | INV-2, INV-3 |
-| `POST /incidents` | El servicio existe. | Incidencia persistida; en `MANUAL_REVIEW` si `confidence < 0.8`. | INV-5 |
+| `POST /incidents` | El servicio existe y no está `CANCELLED`. | Incidencia persistida; en `MANUAL_REVIEW` si `confidence < 0.8`. | INV-5, INV-9 |
 
 ## 3. Criterios de aceptación (Gherkin)
 
@@ -115,6 +117,24 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
     Given una sugerencia de resolución generada por la IA
     When el técnico la acepta, modifica o rechaza
     Then queda un registro con suggestion_id, técnico, decisión y timestamp
+
+  @AC-TELCO-006
+  Scenario: No se contrata con deuda pendiente
+    Given un cliente con KYC VERIFIED y deuda pendiente mayor que 0
+    When el agente comercial intenta contratar un servicio FIBER
+    Then la respuesta es HTTP 409 con code DEBT_OUTSTANDING y no se crea ningún servicio
+
+  @AC-TELCO-007
+  Scenario: No se abre una incidencia sobre un servicio CANCELLED
+    Given un servicio en estado CANCELLED
+    When se registra una incidencia sobre ese servicio
+    Then la respuesta es HTTP 409 con code SERVICE_CANCELLED y no se crea ninguna incidencia
+
+  @AC-TELCO-008
+  Scenario: No se abre una incidencia sobre un servicio inexistente
+    Given un identificador de servicio que no existe
+    When se registra una incidencia sobre ese servicio
+    Then la respuesta es HTTP 404 con code y message y no se crea ninguna incidencia
 ```
 
 ## 4. Trazabilidad
@@ -124,5 +144,7 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
 | Máquina de estados, `VALID_TRANSITIONS`, INV-1, INV-2, INV-3 | FR-DOM-005, FR-DOM-006, FR-DOM-007, FR-DOM-008, FR-DOM-009, FR-DOM-010, FR-DOM-011, FR-DOM-012 |
 | INV-4, AC-TELCO-003 | FR-DOM-003, FR-DOM-004 |
 | INV-5, INV-6, AC-TELCO-004, AC-TELCO-005 | FR-DOM-013, FR-DOM-014, NFR-AI-001, NFR-AUDIT-001 |
+| INV-8, AC-TELCO-006 | FR-DOM-015 |
+| INV-9, AC-TELCO-007, AC-TELCO-008 | FR-DOM-013, FR-DOM-016 |
 | AC-TELCO-001 | FR-DOM-009, NFR-SEC-001 |
 | AC-TELCO-002 | FR-DOM-007 |

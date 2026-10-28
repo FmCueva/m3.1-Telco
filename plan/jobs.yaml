@@ -13,7 +13,7 @@ fase:
   quality_gate_fase:
     - "CI en verde: lint (Prettier + ESLint), tests, dependency-cruiser, gate de cobertura y gate de trazabilidad."
     - "Cobertura de líneas >= 80 % (NFR-QUAL-001)."
-    - "Los 5 criterios AC-TELCO-001 a AC-TELCO-005 tienen al menos un test etiquetado y en verde."
+    - "Los 8 criterios AC-TELCO-001 a AC-TELCO-008 tienen al menos un test etiquetado y en verde."
     - "Todo test lleva una etiqueta @AC-TELCO-nnn."
     - "Todo JOB traza a al menos un requisito del SRS."
     - "0 apariciones de PII en los logs del flujo completo (NFR-AUDIT-001)."
@@ -97,12 +97,13 @@ jobs:
     name: Contratación de servicio con KYC verificado
     owner: Fernando
     priority: Must
-    requirements: [FR-DOM-003, FR-DOM-004]
+    requirements: [FR-DOM-003, FR-DOM-004, FR-DOM-015]
     dependencies: [JOB-002, JOB-003]
     deliverables:
       - "POST /contracts (módulo contracts) que crea el servicio en DRAFT."
     acceptance:
       - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 403 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
+      - "POST /contracts para un cliente VERIFIED con deuda pendiente devuelve HTTP 409 con code DEBT_OUTSTANDING y no crea ningún servicio (INV-8, @AC-TELCO-006)."
       - "POST /contracts con tipo FIBER, MOBILE o PACK para un cliente VERIFIED devuelve HTTP 201 y el servicio queda persistido en DRAFT."
       - "POST /contracts con cualquier otro tipo devuelve HTTP 400."
       - "Un contrato creado con POST /contracts puede confirmarse con CONFIRM_CONTRACT y pasa a PENDING_INSTALLATION (flujo de punta a punta de JOB-003 a JOB-002)."
@@ -131,7 +132,7 @@ jobs:
     name: Incidencias y clasificador de IA bajo control humano
     owner: Fernando
     priority: Must
-    requirements: [FR-DOM-013, FR-DOM-014, NFR-AI-001, NFR-AUDIT-001]
+    requirements: [FR-DOM-013, FR-DOM-014, FR-DOM-016, NFR-AI-001, NFR-AUDIT-001]
     dependencies: [JOB-004]
     deliverables:
       - "POST /incidents (módulo incidents), con HTTP 404 si el servicio no existe."
@@ -140,6 +141,8 @@ jobs:
       - "Endpoint de decisión del técnico (aceptar, modificar o rechazar) con registro de auditoría."
     acceptance:
       - "POST /incidents con cliente y servicio existentes devuelve HTTP 201 y un incident_id opaco."
+      - "POST /incidents sobre un servicio CANCELLED devuelve HTTP 409 con code SERVICE_CANCELLED y no crea la incidencia (INV-9, @AC-TELCO-007)."
+      - "POST /incidents sobre un servicio inexistente devuelve HTTP 404 y no crea la incidencia (INV-9, @AC-TELCO-008)."
       - "Una sugerencia con confidence 0.55 deja la incidencia en MANUAL_REVIEW y no modifica ningún dato (INV-5, @AC-TELCO-004)."
       - "Una sugerencia con confidence >= 0.8 y esquema válido queda pendiente de validación del técnico y no se aplica sola."
       - "Una respuesta con JSON roto o fuera del esquema zod genera una incidencia en MANUAL_REVIEW sin lanzar excepción."

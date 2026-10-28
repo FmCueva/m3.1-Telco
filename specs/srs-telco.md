@@ -46,8 +46,10 @@
 | FR-DOM-010 | Al recibir el webhook de impago, el servicio pasa de `ACTIVE` a `SUSPENDED`; si el servicio no está en `ACTIVE`, la API responde HTTP 409. | Must |
 | FR-DOM-011 | Al recibir el webhook de pago regularizado, el servicio pasa de `SUSPENDED` a `ACTIVE`; si el servicio no está en `SUSPENDED`, la API responde HTTP 409. | Should |
 | FR-DOM-012 | El sistema permite cancelar un servicio desde `DRAFT`, `PENDING_INSTALLATION`, `ACTIVE` o `SUSPENDED`, llevándolo a `CANCELLED`. | Must |
-| FR-DOM-013 | El sistema permite registrar una incidencia asociada a un cliente y a un servicio existentes, con descripción en texto libre, y devuelve un `incident_id` opaco. | Must |
+| FR-DOM-013 | El sistema permite registrar una incidencia asociada a un cliente y a un servicio existentes, con descripción en texto libre, y devuelve un `incident_id` opaco; si el servicio no existe, la API responde HTTP 404 y no crea la incidencia. | Must |
 | FR-DOM-014 | Tras registrarse una incidencia, el clasificador de IA produce una sugerencia de categoría con un valor de `confidence` entre 0 y 1; si `confidence < 0.8` la incidencia pasa a la cola de revisión manual; en todos los casos la sugerencia solo se aplica tras la validación explícita de un técnico, y la IA nunca modifica datos. | Must |
+| FR-DOM-015 | El sistema rechaza con HTTP 409 y code `DEBT_OUTSTANDING` la contratación de un servicio para un cliente con deuda pendiente mayor que 0, sin crear ningún servicio. | Must |
+| FR-DOM-016 | El sistema rechaza con HTTP 409 y code `SERVICE_CANCELLED` el registro de una incidencia sobre un servicio en estado `CANCELLED`, sin crear la incidencia. | Must |
 
 ## 4. Requisitos no funcionales
 
