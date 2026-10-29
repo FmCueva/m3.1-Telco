@@ -4,11 +4,14 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
+import { logEvent } from '../observability/logger';
 import { recordMetric } from '../observability/metrics';
 
 export const MODEL = 'claude-haiku-4-5';
 export const CONFIDENCE_THRESHOLD = 0.8;
 export const COST_METRIC = 'ai_cost_per_incident_eur';
+export const CONFIDENCE_METRIC = 'ai_confidence';
+export const INVALID_OUTPUT_METRIC = 'ai_invalid_output_total';
 
 // Precio Haiku en €/Mtok (ops/presupuesto-operativo.md).
 export const PRICE_IN_EUR_PER_MTOK = 0.92;
@@ -81,6 +84,50 @@ export function computeCostEur(usage: {
   );
 }
 
+// Registra el resultado sin PII: nunca se loguea la descripción ni la sugerencia.
+function finish(result: ClassificationResult): ClassificationResult {
+  logEvent('ai_classification', {
+    model: result.model,
+    outcome: result.kind,
+    reason: result.kind === 'manual_review' ? result.reason : undefined,
+    cost_eur: result.costEur,
+  });
+  return result;
+}
+
+// Valida la salida del modelo y decide entre sugerencia y revisión manual (INV-5, NFR-AI-001).
+function interpret(text: string, costEur: number): ClassificationResult {
+  const invalid = (): ClassificationResult => {
+    recordMetric(INVALID_OUTPUT_METRIC, 1);
+    return finish({
+      kind: 'manual_review',
+      reason: 'invalid_output',
+      model: MODEL,
+      costEur,
+    });
+  };
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return invalid();
+  }
+  const parsed = suggestionSchema.safeParse(raw);
+  if (!parsed.success) return invalid();
+
+  recordMetric(CONFIDENCE_METRIC, parsed.data.confidence);
+  if (parsed.data.confidence < CONFIDENCE_THRESHOLD) {
+    return finish({
+      kind: 'manual_review',
+      reason: 'low_confidence',
+      model: MODEL,
+      costEur,
+    });
+  }
+  return finish({ kind: 'suggestion', suggestion: parsed.data, model: MODEL, costEur });
+}
+
 export async function classifyIncident(
   description: string,
   client?: MessagesClient,
@@ -94,27 +141,17 @@ export async function classifyIncident(
       messages: [{ role: 'user', content: description }],
     });
   } catch {
-    return { kind: 'manual_review', reason: 'ai_error', model: MODEL, costEur: 0 };
+    return finish({
+      kind: 'manual_review',
+      reason: 'ai_error',
+      model: MODEL,
+      costEur: 0,
+    });
   }
 
   const costEur = computeCostEur(response.usage);
   recordMetric(COST_METRIC, costEur);
 
   const block = response.content.find((b) => b.type === 'text');
-  const text = block && block.type === 'text' ? block.text : '';
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return { kind: 'manual_review', reason: 'invalid_output', model: MODEL, costEur };
-  }
-  const parsed = suggestionSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { kind: 'manual_review', reason: 'invalid_output', model: MODEL, costEur };
-  }
-  if (parsed.data.confidence < CONFIDENCE_THRESHOLD) {
-    return { kind: 'manual_review', reason: 'low_confidence', model: MODEL, costEur };
-  }
-  return { kind: 'suggestion', suggestion: parsed.data, model: MODEL, costEur };
+  return interpret(block && block.type === 'text' ? block.text : '', costEur);
 }
