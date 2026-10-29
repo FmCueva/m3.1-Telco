@@ -106,3 +106,84 @@ describe('POST /incidents', () => {
     expect(app.store.listIncidents()).toHaveLength(before);
   });
 });
+
+describe('POST /suggestions/:id/decision', () => {
+  // @AC-TELCO-005
+  it.each(['ACCEPTED', 'MODIFIED', 'REJECTED'] as const)(
+    'decisión %s → 201 y registro con suggestion_id, técnico, decisión y timestamp',
+    async (decision) => {
+      const suggestion = await seed.suggestion(app);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/suggestions/${suggestion.id}/decision`,
+        payload: { technicianId: 't-17', decision },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toEqual({
+        suggestionId: suggestion.id,
+        technicianId: 't-17',
+        decision,
+        decidedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      });
+      expect(app.store.getDecision(suggestion.id)).toMatchObject({ decision });
+    },
+  );
+
+  // @AC-TELCO-005
+  it('decisión fuera del enum o sin técnico → 400 y no se registra nada', async () => {
+    const suggestion = await seed.suggestion(app);
+
+    const badDecision = await app.inject({
+      method: 'POST',
+      url: `/suggestions/${suggestion.id}/decision`,
+      payload: { technicianId: 't-17', decision: 'MAYBE' },
+    });
+    const noTechnician = await app.inject({
+      method: 'POST',
+      url: `/suggestions/${suggestion.id}/decision`,
+      payload: { decision: 'ACCEPTED' },
+    });
+
+    expect(badDecision.statusCode).toBe(400);
+    expect(noTechnician.statusCode).toBe(400);
+    expect(app.store.getDecision(suggestion.id)).toBeUndefined();
+  });
+
+  // @AC-TELCO-005
+  it('sugerencia inexistente → 404 y no se registra nada', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/suggestions/${crypto.randomUUID()}/decision`,
+      payload: { technicianId: 't-17', decision: 'ACCEPTED' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ code: 'SUGGESTION_NOT_FOUND' });
+  });
+
+  // @AC-TELCO-005
+  it('sugerencia ya decidida → 409 y se conserva la primera decisión', async () => {
+    const suggestion = await seed.suggestion(app);
+    const url = `/suggestions/${suggestion.id}/decision`;
+    await app.inject({
+      method: 'POST',
+      url,
+      payload: { technicianId: 't-17', decision: 'ACCEPTED' },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      payload: { technicianId: 't-99', decision: 'REJECTED' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'SUGGESTION_ALREADY_DECIDED' });
+    expect(app.store.getDecision(suggestion.id)).toMatchObject({
+      technicianId: 't-17',
+      decision: 'ACCEPTED',
+    });
+  });
+});

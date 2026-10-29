@@ -1,12 +1,20 @@
 // src/api/store.ts — "DB" en memoria: nace y muere con el proceso (demo y tests de contrato).
 // Sin IO ni dependencias externas. Los métodos put* devuelven la entidad guardada.
 
-import type { Customer, Incident, ServiceContract } from '../domain/types';
+import type {
+  Customer,
+  Incident,
+  ServiceContract,
+  Suggestion,
+  SuggestionDecisionRecord,
+} from '../domain/types';
 
 export class InMemoryStore {
   private readonly customers = new Map<string, Customer>();
   private readonly contracts = new Map<string, ServiceContract>();
   private readonly incidents = new Map<string, Incident>();
+  private readonly suggestions = new Map<string, Suggestion>();
+  private readonly decisions = new Map<string, SuggestionDecisionRecord>();
 
   getCustomer(id: string): Customer | undefined {
     return this.customers.get(id);
@@ -41,5 +49,23 @@ export class InMemoryStore {
   putIncident(incident: Incident): Incident {
     this.incidents.set(incident.id, incident);
     return incident;
+  }
+
+  getSuggestion(id: string): Suggestion | undefined {
+    return this.suggestions.get(id);
+  }
+
+  putSuggestion(suggestion: Suggestion): Suggestion {
+    this.suggestions.set(suggestion.id, suggestion);
+    return suggestion;
+  }
+
+  getDecision(suggestionId: string): SuggestionDecisionRecord | undefined {
+    return this.decisions.get(suggestionId);
+  }
+
+  putDecision(record: SuggestionDecisionRecord): SuggestionDecisionRecord {
+    this.decisions.set(record.suggestionId, record);
+    return record;
   }
 }

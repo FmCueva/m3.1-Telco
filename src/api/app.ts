@@ -10,8 +10,13 @@ import {
   KycRequiredError,
   ServiceCancelledError,
 } from '../domain/contractRules';
+import {
+  assertNotDecided,
+  SuggestionAlreadyDecidedError,
+} from '../domain/suggestionRules';
 import { InvalidTransitionError, transition } from '../domain/serviceTransitions';
 import type { Customer, Incident, ServiceContract } from '../domain/types';
+import { logEvent } from '../observability/logger';
 import { InMemoryStore } from './store';
 
 declare module 'fastify' {
@@ -34,6 +39,10 @@ const eventBody = z.object({
   ]),
 });
 const kycBody = z.object({ result: z.enum(['VERIFIED', 'REJECTED']) });
+const decisionBody = z.object({
+  technicianId: z.string().min(1),
+  decision: z.enum(['ACCEPTED', 'MODIFIED', 'REJECTED']),
+});
 const createIncidentBody = z.object({ contractId: z.string().min(1) });
 
 type IdParams = { id: string };
@@ -44,6 +53,7 @@ function domainStatus(error: unknown): number | undefined {
   if (error instanceof KycRequiredError) return 403; // INV-4
   if (error instanceof DebtOutstandingError) return 409; // INV-8
   if (error instanceof ServiceCancelledError) return 409; // INV-9
+  if (error instanceof SuggestionAlreadyDecidedError) return 409; // INV-6
   return undefined;
 }
 
@@ -150,6 +160,33 @@ function registerIncidentRoutes(app: FastifyInstance): void {
   });
 }
 
+function registerSuggestionRoutes(app: FastifyInstance): void {
+  app.post<{ Params: IdParams }>(
+    '/suggestions/:id/decision',
+    async (request, reply) => {
+      const { technicianId, decision } = decisionBody.parse(request.body);
+      const suggestion = app.store.getSuggestion(request.params.id);
+      if (!suggestion)
+        return reply
+          .status(404)
+          .send(err('SUGGESTION_NOT_FOUND', 'Sugerencia no existe'));
+      assertNotDecided(app.store.getDecision(suggestion.id));
+      const record = app.store.putDecision({
+        suggestionId: suggestion.id,
+        technicianId,
+        decision,
+        decidedAt: new Date().toISOString(),
+      });
+      logEvent('suggestion_decision', {
+        suggestion_id: record.suggestionId,
+        technician_id: record.technicianId,
+        decision: record.decision,
+      });
+      return reply.status(201).send(record);
+    },
+  );
+}
+
 export function buildApp({
   logger = false,
 }: { logger?: boolean } = {}): FastifyInstance {
@@ -160,5 +197,6 @@ export function buildApp({
   registerCustomerRoutes(app);
   registerContractRoutes(app);
   registerIncidentRoutes(app);
+  registerSuggestionRoutes(app);
   return app;
 }

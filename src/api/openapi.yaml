@@ -203,6 +203,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Incident' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /suggestions/{id}/decision:
+    post:
+      summary: Decisión del técnico sobre una sugerencia de la IA (INV-6, AC-TELCO-005)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [technicianId, decision]
+              properties:
+                technicianId: { type: string, example: t-17 }
+                decision: { $ref: '#/components/schemas/SuggestionDecision' }
+      responses:
+        '201':
+          description: Decisión registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuggestionDecisionRecord' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La sugerencia ya tiene decisión (SUGGESTION_ALREADY_DECIDED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 components:
   parameters:
     Id:
@@ -252,6 +280,17 @@ components:
         customerId: { type: string }
         type: { $ref: '#/components/schemas/ContractType' }
         status: { $ref: '#/components/schemas/ServiceStatus' }
+    SuggestionDecision:
+      type: string
+      enum: [ACCEPTED, MODIFIED, REJECTED]
+    SuggestionDecisionRecord:
+      type: object
+      required: [suggestionId, technicianId, decision, decidedAt]
+      properties:
+        suggestionId: { type: string }
+        technicianId: { type: string }
+        decision: { $ref: '#/components/schemas/SuggestionDecision' }
+        decidedAt: { type: string, format: date-time }
     Incident:
       type: object
       required: [id, contractId, status]

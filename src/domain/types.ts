@@ -39,3 +39,18 @@ export interface Incident {
   contractId: string;
   status: IncidentStatus;
 }
+
+// INV-6: la IA solo sugiere; la decisión es siempre de un técnico humano y queda registrada.
+export type SuggestionDecision = 'ACCEPTED' | 'MODIFIED' | 'REJECTED';
+
+export interface Suggestion {
+  id: string;
+  incidentId: string;
+}
+
+export interface SuggestionDecisionRecord {
+  suggestionId: string;
+  technicianId: string; // identificador opaco (t-17), nunca el nombre
+  decision: SuggestionDecision;
+  decidedAt: string; // ISO 8601
+}

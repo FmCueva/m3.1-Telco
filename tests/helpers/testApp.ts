@@ -6,7 +6,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/api/app';
-import type { Customer, ServiceContract } from '../../src/domain/types';
+import type { Customer, ServiceContract, Suggestion } from '../../src/domain/types';
 
 export async function buildTestApp(): Promise<FastifyInstance> {
   const app = buildApp(); // store en memoria nuevo: cada suite arranca limpia
@@ -42,5 +42,16 @@ export const seed = {
       customerId,
     };
     return app.store.putContract(contract);
+  },
+
+  async suggestion(
+    app: FastifyInstance,
+    data: Partial<Suggestion> = {},
+  ): Promise<Suggestion> {
+    return app.store.putSuggestion({
+      id: crypto.randomUUID(),
+      incidentId: crypto.randomUUID(),
+      ...data,
+    });
   },
 };
