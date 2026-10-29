@@ -15,6 +15,7 @@ import {
   SuggestionAlreadyDecidedError,
 } from '../domain/suggestionRules';
 import { InvalidTransitionError, transition } from '../domain/serviceTransitions';
+import { acceptanceRate, auditLogCompleteness } from '../domain/auditMetrics';
 import { statusAfterClassification } from '../domain/incidentRules';
 import type { Customer, Incident, ServiceContract } from '../domain/types';
 import { logEvent } from '../observability/logger';
@@ -175,6 +176,12 @@ function storeSuggestion(
     ...outcome.suggestion,
     model: outcome.model,
   });
+  app.store.appendAudit({
+    event: 'suggestion_created',
+    suggestionId: suggestion.id,
+    occurredAt: new Date().toISOString(),
+    model: suggestion.model,
+  });
   logEvent('suggestion_created', {
     suggestion_id: suggestion.id,
     incident_id: incidentId,
@@ -247,6 +254,13 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
         decision,
         decidedAt: new Date().toISOString(),
       });
+      app.store.appendAudit({
+        event: 'suggestion_decision',
+        suggestionId: record.suggestionId,
+        occurredAt: record.decidedAt,
+        technicianId: record.technicianId,
+        decision: record.decision,
+      });
       logEvent('suggestion_decision', {
         suggestion_id: record.suggestionId,
         technician_id: record.technicianId,
@@ -255,6 +269,31 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
       return reply.status(201).send(record);
     },
   );
+}
+
+// Métricas AGREGADAS en formato texto de Prometheus (nunca por técnico: EU AI Act, Anexo III.4).
+function registerMetricsRoute(app: FastifyInstance): void {
+  app.get('/metrics', async (_request, reply) => {
+    const decisions = app.store.listDecisions();
+    const rate = acceptanceRate(decisions);
+    const completeness = auditLogCompleteness({
+      suggestions: app.store.listSuggestions(),
+      decisions,
+      audit: app.store.listAudit(),
+    });
+    const lines = [
+      '# HELP ai_acceptance_rate Decisiones ACCEPTED sobre el total de decisiones del técnico.',
+      '# TYPE ai_acceptance_rate gauge',
+      ...(rate === undefined ? [] : [`ai_acceptance_rate ${rate}`]),
+      '# HELP ai_decisions_total Decisiones registradas sobre sugerencias de la IA.',
+      '# TYPE ai_decisions_total counter',
+      `ai_decisions_total ${decisions.length}`,
+      '# HELP audit_log_completeness Entradas de auditoría completas sobre las esperadas (INV-6).',
+      '# TYPE audit_log_completeness gauge',
+      `audit_log_completeness ${completeness}`,
+    ];
+    return reply.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
+  });
 }
 
 export function buildApp({
@@ -269,5 +308,6 @@ export function buildApp({
   registerContractRoutes(app);
   registerIncidentRoutes(app, classifier);
   registerSuggestionRoutes(app);
+  registerMetricsRoute(app);
   return app;
 }

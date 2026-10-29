@@ -59,3 +59,13 @@ export interface SuggestionDecisionRecord {
   decision: SuggestionDecision;
   decidedAt: string; // ISO 8601
 }
+
+// Registro de auditoría (NFR-AUDIT-001): una entrada por sugerencia y una por decisión.
+export interface AuditEntry {
+  event: 'suggestion_created' | 'suggestion_decision';
+  suggestionId: string;
+  occurredAt: string; // ISO 8601
+  model?: string; // suggestion_created
+  technicianId?: string; // suggestion_decision, opaco
+  decision?: SuggestionDecision; // suggestion_decision
+}

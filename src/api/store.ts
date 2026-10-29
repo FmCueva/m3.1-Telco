@@ -2,6 +2,7 @@
 // Sin IO ni dependencias externas. Los métodos put* devuelven la entidad guardada.
 
 import type {
+  AuditEntry,
   Customer,
   Incident,
   ServiceContract,
@@ -15,6 +16,7 @@ export class InMemoryStore {
   private readonly incidents = new Map<string, Incident>();
   private readonly suggestions = new Map<string, Suggestion>();
   private readonly decisions = new Map<string, SuggestionDecisionRecord>();
+  private readonly auditLog: AuditEntry[] = [];
 
   getCustomer(id: string): Customer | undefined {
     return this.customers.get(id);
@@ -67,5 +69,21 @@ export class InMemoryStore {
   putDecision(record: SuggestionDecisionRecord): SuggestionDecisionRecord {
     this.decisions.set(record.suggestionId, record);
     return record;
+  }
+
+  listSuggestions(): Suggestion[] {
+    return [...this.suggestions.values()];
+  }
+
+  listDecisions(): SuggestionDecisionRecord[] {
+    return [...this.decisions.values()];
+  }
+
+  appendAudit(entry: AuditEntry): void {
+    this.auditLog.push(entry);
+  }
+
+  listAudit(): readonly AuditEntry[] {
+    return this.auditLog;
   }
 }
