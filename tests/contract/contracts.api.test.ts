@@ -79,7 +79,7 @@ describe('POST /incidents', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/incidents',
-      payload: { contractId: crypto.randomUUID() },
+      payload: { contractId: crypto.randomUUID(), description: 'Sin servicio' },
     });
 
     expect(res.statusCode).toBe(404);
@@ -98,7 +98,7 @@ describe('POST /incidents', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/incidents',
-      payload: { contractId: contract.id },
+      payload: { contractId: contract.id, description: 'Sin servicio' },
     });
 
     expect(res.statusCode).toBe(409);

@@ -37,6 +37,7 @@ export type IncidentStatus = 'OPEN' | 'MANUAL_REVIEW' | 'RESOLVED';
 export interface Incident {
   id: string;
   contractId: string;
+  description: string;
   status: IncidentStatus;
 }
 
@@ -46,6 +47,10 @@ export type SuggestionDecision = 'ACCEPTED' | 'MODIFIED' | 'REJECTED';
 export interface Suggestion {
   id: string;
   incidentId: string;
+  category: string;
+  confidence: number;
+  suggestedResolution: string;
+  model: string;
 }
 
 export interface SuggestionDecisionRecord {

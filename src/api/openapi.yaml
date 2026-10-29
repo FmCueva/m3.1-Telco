@@ -164,22 +164,24 @@ paths:
                 }
   /incidents:
     post:
-      summary: Abre una incidencia sobre un servicio (nace en OPEN)
+      summary: Abre una incidencia sobre un servicio y la clasifica con IA
       description: >-
-        Crea una incidencia en OPEN para un contrato existente. El contrato debe
-        existir y no estar CANCELLED.
+        Crea una incidencia para un contrato existente (no CANCELLED) y la clasifica
+        con IA. Confianza < 0.8 o salida inválida → MANUAL_REVIEW. Una sugerencia
+        válida deja la incidencia en OPEN con `suggestion`, pendiente del técnico.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [contractId]
+              required: [contractId, description]
               properties:
                 contractId: { type: string, minLength: 1 }
+                description: { type: string, minLength: 1 }
       responses:
         '201':
-          description: Incidencia creada en OPEN
+          description: Incidencia creada (OPEN o MANUAL_REVIEW), con `suggestion` si la IA sugirió
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Incident' }
@@ -191,6 +193,21 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { code: SERVICE_CANCELLED, message: El servicio está CANCELLED }
+    get:
+      summary: Lista incidencias, filtrable por estado (cola de revisión manual)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
+      responses:
+        '200':
+          description: Incidencias
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
   /incidents/{id}/resolve:
     post:
       summary: Resolución de la incidencia por el técnico
@@ -293,8 +310,18 @@ components:
         decidedAt: { type: string, format: date-time }
     Incident:
       type: object
-      required: [id, contractId, status]
+      required: [id, contractId, description, status]
       properties:
         id: { type: string }
         contractId: { type: string }
+        description: { type: string }
         status: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
+        suggestion:
+          type: object
+          description: Solo si la IA sugirió con confianza >= 0.8; pendiente del técnico
+          required: [suggestionId, category, confidence, suggestedResolution]
+          properties:
+            suggestionId: { type: string }
+            category: { type: string }
+            confidence: { type: number, minimum: 0, maximum: 1 }
+            suggestedResolution: { type: string, maxLength: 600 }

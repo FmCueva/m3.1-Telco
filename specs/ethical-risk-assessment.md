@@ -5,7 +5,7 @@
 > **Relación con la implementación.** Este documento es parte de la spec: cada riesgo se convierte
 > en un requisito verificable (INV-5, INV-6, INV-7, NFR-AI-001, NFR-AUDIT-001, NFR-COST-001) y el
 > clasificador (`src/ai/classifyIncident.ts`) lo implementa. La sección 2.4 indica qué controles
-> ya están en el código y cuáles quedan pendientes en JOB-006. Cualquier cambio de modelo, prompt
+> ya están en el código y cuáles quedan pendientes. Cualquier cambio de modelo, prompt
 > o alcance del clasificador se refleja primero aquí.
 
 Referencias: FR-DOM-014, NFR-AI-001, NFR-AUDIT-001, NFR-SEC-001, INV-5, INV-6, INV-7,
@@ -114,7 +114,9 @@ Estado de cada control frente al código. «Implementado» significa que existe 
 | Al modelo viaja solo la descripción de la incidencia. | R-07 | Parámetro `description` | Implementado (por diseño de la firma) |
 | Tests con SDK mockeado (0 tokens). | todos | `tests/unit/classifyIncident.test.ts` | Implementado |
 | Registro de la decisión del técnico (`suggestionId`, técnico opaco, decisión, marca de tiempo); una sola decisión por sugerencia (409 si se repite) y log `suggestion_decision` sin PII. | R-01, R-02, R-08 | `POST /suggestions/:id/decision` en `src/api/app.ts`, `src/domain/suggestionRules.ts` | Implementado, con test (@AC-TELCO-005) |
-| Registro de cada sugerencia con modelo, resultado y coste, sin PII (`ai_classification`). | R-08 | `finish()` en `src/ai/classifyIncident.ts`, `src/observability/logger.ts` | Implementado, con test. Falta el identificador de la sugerencia y la métrica `audit_log_completeness` (JOB-006) |
+| Registro de cada sugerencia con modelo, resultado y coste (`ai_classification`) y al guardarla con su `suggestion_id` e `incident_id` opacos (`suggestion_created`), sin PII. | R-08 | `finish()` en `src/ai/classifyIncident.ts`, `storeSuggestion()` en `src/api/app.ts`, `src/observability/logger.ts` | Implementado, con test. Falta la métrica `audit_log_completeness` |
+| Flujo de incidencia: la IA solo se invoca con servicio válido; confianza baja o salida inválida → `MANUAL_REVIEW`; sugerencia válida → `OPEN` pendiente del técnico, que decide con `suggestionId`. | R-01, R-03, R-05 | `POST /incidents`, `src/domain/incidentRules.ts`, inyección del clasificador en `src/server.ts` | Implementado, con test (@AC-TELCO-004, @AC-TELCO-005, @AC-TELCO-007, @AC-TELCO-008) |
+| Cola de revisión manual consultable. | R-03 | `GET /incidents?status=MANUAL_REVIEW` | Implementado, con test |
 | Test que inspecciona los logs buscando PII (0 apariciones). El logger lanza error ante campos prohibidos o valores con forma de PII. | R-07 | `src/observability/logger.ts`, `tests/unit/logging-no-pii.test.ts` | Implementado, con test |
 | Métricas `ai_confidence` y `ai_invalid_output_total`. | R-04, R-12 | `src/ai/classifyIncident.ts`, `src/observability/metrics.ts` | Implementado, con test |
 | Métrica `ai_acceptance_rate` (decisiones `ACCEPTED` sobre el total). | R-02 | Los datos ya existen en el registro de decisiones; falta calcular y exponer la métrica | **Pendiente** |
@@ -122,7 +124,7 @@ Estado de cada control frente al código. «Implementado» significa que existe 
 
 Observación: el resultado de `classifyIncident` ya trae `reason` (`low_confidence`, `invalid_output`,
 `ai_error`) y `costEur`; `ai_confidence` y `ai_invalid_output_total` ya se registran, y la cola de
-revisión las consumirá en JOB-006.
+revisión manual ya existe (`MANUAL_REVIEW`).
 
 ## 3. Principios que guían los controles
 

@@ -19,7 +19,8 @@ const FORBIDDEN_KEYS = new Set([
 
 const PII_PATTERNS: readonly RegExp[] = [
   /[\w.+-]+@[\w-]+\.[\w.]+/, // email
-  /\+?\d[\d\s-]{7,}\d/, // teléfono o documento (8+ dígitos)
+  // teléfono o documento (8+ dígitos); los límites evitan falsos positivos con UUID (c-721, a1b2-3456-…)
+  /(?<![\w-])\+?\d(?:[\s-]?\d){7,}(?![\w-])/,
 ];
 
 export type LogSink = (line: string) => void;

@@ -26,6 +26,12 @@ describe('logger sin PII', () => {
     },
   );
 
+  it('un UUID con segmentos numéricos no es PII', () => {
+    expect(() =>
+      logEvent('x', { incident_id: '12345678-1234-4567-8123-45678123456a' }),
+    ).not.toThrow();
+  });
+
   it('identificadores opacos pasan', () => {
     const lines: string[] = [];
     setLogSink((l) => lines.push(l));

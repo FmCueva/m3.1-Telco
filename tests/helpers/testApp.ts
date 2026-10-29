@@ -5,11 +5,13 @@
 // CANCELLED.
 
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../src/api/app';
+import { buildApp, type BuildAppOptions } from '../../src/api/app';
 import type { Customer, ServiceContract, Suggestion } from '../../src/domain/types';
 
-export async function buildTestApp(): Promise<FastifyInstance> {
-  const app = buildApp(); // store en memoria nuevo: cada suite arranca limpia
+export async function buildTestApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
+  const app = buildApp(options); // store en memoria nuevo: cada suite arranca limpia
   await app.ready();
   return app;
 }
@@ -51,6 +53,10 @@ export const seed = {
     return app.store.putSuggestion({
       id: crypto.randomUUID(),
       incidentId: crypto.randomUUID(),
+      category: 'OTHER',
+      confidence: 0.9,
+      suggestedResolution: 'Revisar.',
+      model: 'claude-haiku-4-5',
       ...data,
     });
   },

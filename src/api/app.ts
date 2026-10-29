@@ -15,6 +15,7 @@ import {
   SuggestionAlreadyDecidedError,
 } from '../domain/suggestionRules';
 import { InvalidTransitionError, transition } from '../domain/serviceTransitions';
+import { statusAfterClassification } from '../domain/incidentRules';
 import type { Customer, Incident, ServiceContract } from '../domain/types';
 import { logEvent } from '../observability/logger';
 import { InMemoryStore } from './store';
@@ -43,7 +44,28 @@ const decisionBody = z.object({
   technicianId: z.string().min(1),
   decision: z.enum(['ACCEPTED', 'MODIFIED', 'REJECTED']),
 });
-const createIncidentBody = z.object({ contractId: z.string().min(1) });
+const createIncidentBody = z.object({
+  contractId: z.string().min(1),
+  description: z.string().min(1),
+});
+const listIncidentsQuery = z.object({
+  status: z.enum(['OPEN', 'MANUAL_REVIEW', 'RESOLVED']).optional(),
+});
+
+// Contrato mínimo del clasificador (estructural: la API no importa src/ai, ADR-001).
+// server.ts inyecta classifyIncident; sin clasificador la incidencia queda en OPEN.
+export type ClassifierOutcome =
+  | {
+      kind: 'suggestion';
+      suggestion: { category: string; confidence: number; suggestedResolution: string };
+      model: string;
+    }
+  | { kind: 'manual_review'; reason: string; model: string };
+export type IncidentClassifier = (description: string) => Promise<ClassifierOutcome>;
+export interface BuildAppOptions {
+  logger?: boolean;
+  classifier?: IncidentClassifier;
+}
 
 type IdParams = { id: string };
 
@@ -141,15 +163,63 @@ function registerContractRoutes(app: FastifyInstance): void {
   });
 }
 
-function registerIncidentRoutes(app: FastifyInstance): void {
+// Guarda la sugerencia y la audita (INV-6, NFR-AUDIT-001): solo IDs opacos, nunca la descripción.
+function storeSuggestion(
+  app: FastifyInstance,
+  incidentId: string,
+  outcome: Extract<ClassifierOutcome, { kind: 'suggestion' }>,
+) {
+  const suggestion = app.store.putSuggestion({
+    id: crypto.randomUUID(),
+    incidentId,
+    ...outcome.suggestion,
+    model: outcome.model,
+  });
+  logEvent('suggestion_created', {
+    suggestion_id: suggestion.id,
+    incident_id: incidentId,
+    model: suggestion.model,
+    category: suggestion.category,
+    confidence: suggestion.confidence,
+  });
+  return {
+    suggestionId: suggestion.id,
+    category: suggestion.category,
+    confidence: suggestion.confidence,
+    suggestedResolution: suggestion.suggestedResolution,
+  };
+}
+
+function registerIncidentRoutes(
+  app: FastifyInstance,
+  classify?: IncidentClassifier,
+): void {
   app.post('/incidents', async (request, reply) => {
-    const { contractId } = createIncidentBody.parse(request.body);
+    const { contractId, description } = createIncidentBody.parse(request.body);
     const contract = app.store.getContract(contractId);
     if (!contract)
       return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Servicio no existe'));
     assertCanOpenIncident(contract);
-    const incident: Incident = { id: crypto.randomUUID(), contractId, status: 'OPEN' };
-    return reply.status(201).send(app.store.putIncident(incident));
+    const outcome = classify ? await classify(description) : undefined;
+    const incident: Incident = {
+      id: crypto.randomUUID(),
+      contractId,
+      description,
+      status: outcome ? statusAfterClassification(outcome.kind) : 'OPEN',
+    };
+    app.store.putIncident(incident);
+    if (outcome?.kind !== 'suggestion') return reply.status(201).send(incident);
+
+    return reply.status(201).send({
+      ...incident,
+      suggestion: storeSuggestion(app, incident.id, outcome),
+    });
+  });
+
+  // Cola de revisión manual: GET /incidents?status=MANUAL_REVIEW
+  app.get('/incidents', async (request) => {
+    const { status } = listIncidentsQuery.parse(request.query);
+    return app.store.listIncidents().filter((i) => !status || i.status === status);
   });
 
   app.post<{ Params: IdParams }>('/incidents/:id/resolve', async (request, reply) => {
@@ -189,14 +259,15 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
 
 export function buildApp({
   logger = false,
-}: { logger?: boolean } = {}): FastifyInstance {
+  classifier,
+}: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger });
   app.decorate('store', new InMemoryStore());
   registerErrorHandling(app);
   app.get('/healthz', async () => ({ status: 'ok' }));
   registerCustomerRoutes(app);
   registerContractRoutes(app);
-  registerIncidentRoutes(app);
+  registerIncidentRoutes(app, classifier);
   registerSuggestionRoutes(app);
   return app;
 }
