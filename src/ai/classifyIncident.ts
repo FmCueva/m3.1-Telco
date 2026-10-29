@@ -15,10 +15,10 @@ export const PRICE_IN_EUR_PER_MTOK = 0.92;
 export const PRICE_OUT_EUR_PER_MTOK = 4.6;
 
 export const CATEGORIES = [
-  'NO_SERVICE',
+  'NETWORK_OUTAGE',
   'SLOW_SPEED',
   'BILLING',
-  'INSTALLATION',
+  'EQUIPMENT',
   'OTHER',
 ] as const;
 
@@ -59,7 +59,8 @@ const SYSTEM_PROMPT = `Eres un asistente que clasifica incidencias de una operad
 Un técnico humano revisará SIEMPRE tu sugerencia antes de aplicarla: tú no decides ni modificas nada.
 Responde únicamente con un JSON con esta forma:
 {"category": "${CATEGORIES.join('|')}", "confidence": <número entre 0 y 1>, "suggestedResolution": "<máx. 600 caracteres>"}
-No incluyas texto fuera del JSON. Si no estás seguro, baja la confianza.`;
+No incluyas texto fuera del JSON. Si no estás seguro, baja la confianza.
+No inventes datos del cliente. No prometas plazos.`;
 
 let defaultClient: MessagesClient | undefined;
 

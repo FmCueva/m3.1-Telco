@@ -31,14 +31,14 @@ describe('classifyIncident', () => {
   it('confianza alta y esquema válido → sugerencia (pendiente de técnico)', async () => {
     const { client, create } = mockClient(
       json({
-        category: 'NO_SERVICE',
+        category: 'NETWORK_OUTAGE',
         confidence: 0.92,
         suggestedResolution: 'Reiniciar ONT.',
       }),
     );
     const r = await classifyIncident('Sin internet desde ayer', client);
     expect(r.kind).toBe('suggestion');
-    if (r.kind === 'suggestion') expect(r.suggestion.category).toBe('NO_SERVICE');
+    if (r.kind === 'suggestion') expect(r.suggestion.category).toBe('NETWORK_OUTAGE');
     expect(create.mock.calls[0]?.[0].model).toBe('claude-haiku-4-5');
     expect(create.mock.calls[0]?.[0].system).toContain('técnico humano');
   });
