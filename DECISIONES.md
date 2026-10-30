@@ -35,7 +35,7 @@ cola manual. Lo acotamos con el **SLO-3**: el 95 % de la cola se resuelve en men
 
 *Límite honesto:* el 0.8 no está calibrado con datos reales; es un umbral prudente. Hay que
 medir qué fracción cae en `MANUAL_REVIEW` y revisarlo con `ai_acceptance_rate`. El tope de
-0,01 €/incidencia es un tope interno de operación (`ops/`), no un requisito del SRS; el SRS solo exige registrar el coste (NFR-AI-001).
+0,01 €/incidencia se llama NFR-COST-001 en `ops/`, pero ese ID no existe en el SRS.
 
 ## Qué hizo la IA y qué decidí yo
 

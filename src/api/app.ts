@@ -24,7 +24,6 @@ import {
 import type { Customer, Incident, ServiceContract } from '../domain/types';
 import { manualReviewResolutionSeconds } from '../domain/queueMetrics';
 import { histogramLines } from '../observability/histogram';
-import { registerWebhookRoutes } from './webhooks';
 import { logEvent } from '../observability/logger';
 import { InMemoryStore } from './store';
 
@@ -74,7 +73,6 @@ export type IncidentClassifier = (description: string) => Promise<ClassifierOutc
 export interface BuildAppOptions {
   logger?: boolean;
   classifier?: IncidentClassifier;
-  webhookSecret?: string; // sin secreto, todo webhook se rechaza con 401 (NFR-SEC-001)
 }
 
 type IdParams = { id: string };
@@ -336,7 +334,6 @@ function registerMetricsRoute(app: FastifyInstance): void {
 export function buildApp({
   logger = false,
   classifier,
-  webhookSecret,
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger });
   app.decorate('store', new InMemoryStore());
@@ -347,7 +344,6 @@ export function buildApp({
   registerIncidentRoutes(app, classifier);
   registerIncidentResolutionRoutes(app);
   registerSuggestionRoutes(app);
-  registerWebhookRoutes(app, webhookSecret);
   registerMetricsRoute(app);
   return app;
 }

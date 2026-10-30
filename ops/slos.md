@@ -57,7 +57,7 @@ cubre la alerta `IncidentManualQueueSaturated` (cola > 50) y su runbook.
 🔴 <10 %: feature freeze, foco en fiabilidad · ⚫ 0 %: post-mortem + decisión del instructor.
 Excepción: PRs `safety-fix` con approval del on-call.
 
-## Métricas del módulo IA (NFR-AI-001, NFR-AUDIT-001)
+## Métricas del módulo IA (NFR-COST-001, NFR-AUDIT-001)
 
 | Métrica | Umbral de alerta |
 |---|---|

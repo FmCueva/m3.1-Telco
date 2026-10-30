@@ -173,20 +173,6 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
     Given una incidencia que nunca estuvo en MANUAL_REVIEW
     When el técnico la resuelve
     Then GET /metrics no añade ninguna observación a incident_manual_review_resolution_seconds
-
-  @AC-TELCO-015
-  Scenario: Un webhook sin firma válida se rechaza
-    Given un servicio en estado PENDING_INSTALLATION
-    When llega INSTALLATION_COMPLETED con firma ausente o inválida
-    Then la respuesta es HTTP 401 y el servicio permanece en PENDING_INSTALLATION
-
-  @AC-TELCO-016
-  Scenario: Los webhooks de facturación suspenden y reactivan el servicio
-    Given un servicio en estado ACTIVE
-    When el sistema de facturación notifica PAYMENT_DEFAULT con firma válida
-    Then el servicio pasa a SUSPENDED y la respuesta es HTTP 200
-    And al notificar PAYMENT_REGULARIZED con firma válida vuelve a ACTIVE
-    And un webhook fuera del estado de origen requerido responde HTTP 409
 ```
 
 ## 4. Trazabilidad
@@ -200,7 +186,5 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
 | INV-9, AC-TELCO-007, AC-TELCO-008 | FR-DOM-013, FR-DOM-016 |
 | INV-10, AC-TELCO-009, AC-TELCO-010, AC-TELCO-011, AC-TELCO-012 | FR-DOM-017 |
 | AC-TELCO-013, AC-TELCO-014 | NFR-OPS-001 |
-| AC-TELCO-015 | FR-DOM-009, NFR-SEC-001 |
-| AC-TELCO-016 | FR-DOM-010, FR-DOM-011 |
 | AC-TELCO-001 | FR-DOM-009, NFR-SEC-001 |
 | AC-TELCO-002 | FR-DOM-007 |

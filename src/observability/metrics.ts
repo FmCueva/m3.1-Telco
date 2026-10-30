@@ -1,5 +1,5 @@
 // src/observability/metrics.ts — métricas en memoria (hoja del ADR-001: no importa otros módulos).
-// ai_cost_per_incident_eur (NFR-AI-001): histograma simplificado, una muestra por clasificación.
+// ai_cost_per_incident_eur (NFR-COST-001): histograma simplificado, una muestra por clasificación.
 
 const samples = new Map<string, number[]>();
 
