@@ -1,5 +1,5 @@
-// src/api/store.ts — "DB" en memoria: nace y muere con el proceso (demo y tests de contrato).
-// Sin IO ni dependencias externas. Los métodos put* devuelven la entidad guardada.
+// src/api/store.ts — contrato de persistencia y "DB" en memoria: nace y muere con el proceso
+// (demo y tests de contrato). Sin IO ni dependencias externas. Los put* devuelven la entidad guardada.
 
 import type {
   AuditEntry,
@@ -10,7 +10,27 @@ import type {
   SuggestionDecisionRecord,
 } from '../domain/types';
 
-export class InMemoryStore {
+// Contrato de persistencia: lo cumplen la DB en memoria (tests, demo) y PostgreSQL (pgStore.ts).
+export interface Store {
+  getCustomer(id: string): Promise<Customer | undefined>;
+  putCustomer(customer: Customer): Promise<Customer>;
+  getContract(id: string): Promise<ServiceContract | undefined>;
+  putContract(contract: ServiceContract): Promise<ServiceContract>;
+  listContractsByCustomer(customerId: string): Promise<ServiceContract[]>;
+  listIncidents(): Promise<Incident[]>;
+  getIncident(id: string): Promise<Incident | undefined>;
+  putIncident(incident: Incident): Promise<Incident>;
+  getSuggestion(id: string): Promise<Suggestion | undefined>;
+  putSuggestion(suggestion: Suggestion): Promise<Suggestion>;
+  getDecision(suggestionId: string): Promise<SuggestionDecisionRecord | undefined>;
+  putDecision(record: SuggestionDecisionRecord): Promise<SuggestionDecisionRecord>;
+  listSuggestions(): Promise<Suggestion[]>;
+  listDecisions(): Promise<SuggestionDecisionRecord[]>;
+  appendAudit(entry: AuditEntry): Promise<void>;
+  listAudit(): Promise<readonly AuditEntry[]>;
+}
+
+export class InMemoryStore implements Store {
   private readonly customers = new Map<string, Customer>();
   private readonly contracts = new Map<string, ServiceContract>();
   private readonly incidents = new Map<string, Incident>();
@@ -18,72 +38,76 @@ export class InMemoryStore {
   private readonly decisions = new Map<string, SuggestionDecisionRecord>();
   private readonly auditLog: AuditEntry[] = [];
 
-  getCustomer(id: string): Customer | undefined {
+  async getCustomer(id: string): Promise<Customer | undefined> {
     return this.customers.get(id);
   }
 
-  putCustomer(customer: Customer): Customer {
+  async putCustomer(customer: Customer): Promise<Customer> {
     this.customers.set(customer.id, customer);
     return customer;
   }
 
-  getContract(id: string): ServiceContract | undefined {
+  async getContract(id: string): Promise<ServiceContract | undefined> {
     return this.contracts.get(id);
   }
 
-  putContract(contract: ServiceContract): ServiceContract {
+  async putContract(contract: ServiceContract): Promise<ServiceContract> {
     this.contracts.set(contract.id, contract);
     return contract;
   }
 
-  listContractsByCustomer(customerId: string): ServiceContract[] {
+  async listContractsByCustomer(customerId: string): Promise<ServiceContract[]> {
     return [...this.contracts.values()].filter((c) => c.customerId === customerId);
   }
 
-  listIncidents(): Incident[] {
+  async listIncidents(): Promise<Incident[]> {
     return [...this.incidents.values()];
   }
 
-  getIncident(id: string): Incident | undefined {
+  async getIncident(id: string): Promise<Incident | undefined> {
     return this.incidents.get(id);
   }
 
-  putIncident(incident: Incident): Incident {
+  async putIncident(incident: Incident): Promise<Incident> {
     this.incidents.set(incident.id, incident);
     return incident;
   }
 
-  getSuggestion(id: string): Suggestion | undefined {
+  async getSuggestion(id: string): Promise<Suggestion | undefined> {
     return this.suggestions.get(id);
   }
 
-  putSuggestion(suggestion: Suggestion): Suggestion {
+  async putSuggestion(suggestion: Suggestion): Promise<Suggestion> {
     this.suggestions.set(suggestion.id, suggestion);
     return suggestion;
   }
 
-  getDecision(suggestionId: string): SuggestionDecisionRecord | undefined {
+  async getDecision(
+    suggestionId: string,
+  ): Promise<SuggestionDecisionRecord | undefined> {
     return this.decisions.get(suggestionId);
   }
 
-  putDecision(record: SuggestionDecisionRecord): SuggestionDecisionRecord {
+  async putDecision(
+    record: SuggestionDecisionRecord,
+  ): Promise<SuggestionDecisionRecord> {
     this.decisions.set(record.suggestionId, record);
     return record;
   }
 
-  listSuggestions(): Suggestion[] {
+  async listSuggestions(): Promise<Suggestion[]> {
     return [...this.suggestions.values()];
   }
 
-  listDecisions(): SuggestionDecisionRecord[] {
+  async listDecisions(): Promise<SuggestionDecisionRecord[]> {
     return [...this.decisions.values()];
   }
 
-  appendAudit(entry: AuditEntry): void {
+  async appendAudit(entry: AuditEntry): Promise<void> {
     this.auditLog.push(entry);
   }
 
-  listAudit(): readonly AuditEntry[] {
+  async listAudit(): Promise<readonly AuditEntry[]> {
     return this.auditLog;
   }
 }

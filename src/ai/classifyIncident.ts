@@ -33,7 +33,11 @@ const suggestionSchema = z.object({
 
 export type IncidentSuggestion = z.infer<typeof suggestionSchema>;
 
-export type ManualReviewReason = 'low_confidence' | 'invalid_output' | 'ai_error';
+export type ManualReviewReason =
+  | 'low_confidence'
+  | 'invalid_output'
+  | 'ai_error'
+  | 'ai_disabled';
 
 export type ClassificationResult =
   | {
@@ -154,4 +158,21 @@ export async function classifyIncident(
 
   const block = response.content.find((b) => b.type === 'text');
   return interpret(block && block.type === 'text' ? block.text : '', costEur);
+}
+
+// Kill-switch del runbook (ops/runbook-cola-incidencias.md): con AI_CLASSIFICATION_DISABLED=true
+// todo pasa a revisión manual sin llamar al modelo (0 tokens). Se lee en cada llamada.
+export async function classifyUnlessDisabled(
+  description: string,
+  client?: MessagesClient,
+  env: Record<string, string | undefined> = process.env,
+): Promise<ClassificationResult> {
+  if (env.AI_CLASSIFICATION_DISABLED === 'true')
+    return finish({
+      kind: 'manual_review',
+      reason: 'ai_disabled',
+      model: MODEL,
+      costEur: 0,
+    });
+  return classifyIncident(description, client);
 }

@@ -57,11 +57,11 @@ describe('POST /incidents con clasificador', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({ status: 'MANUAL_REVIEW' });
-    expect(app.store.getIncident(res.json().id)?.manualReviewAt).toEqual(
+    expect((await app.store.getIncident(res.json().id))?.manualReviewAt).toEqual(
       expect.any(String),
     ); // @AC-TELCO-013
     expect(res.json().suggestion).toBeUndefined();
-    expect(app.store.getContract(contract.id)).toEqual(contract);
+    expect(await app.store.getContract(contract.id)).toEqual(contract);
   });
 
   it('salida inválida de la IA → MANUAL_REVIEW', async () => {
@@ -100,7 +100,7 @@ describe('POST /incidents con clasificador', () => {
       suggestedResolution: 'Revisar factura.',
     });
     expect(classifier).toHaveBeenCalledWith('Me cobran de más');
-    expect(app.store.getDecision(body.suggestion.suggestionId)).toBeUndefined();
+    expect(await app.store.getDecision(body.suggestion.suggestionId)).toBeUndefined();
 
     const decision = await app.inject({
       method: 'POST',
@@ -121,7 +121,7 @@ describe('POST /incidents con clasificador', () => {
 
     expect(res.statusCode).toBe(400);
     expect(classifier).not.toHaveBeenCalled();
-    expect(app.store.listIncidents()).toHaveLength(0);
+    expect(await app.store.listIncidents()).toHaveLength(0);
   });
 
   // @AC-TELCO-007
@@ -181,7 +181,7 @@ describe('GET /incidents?status=MANUAL_REVIEW', () => {
       url: '/incidents',
       payload: { contractId: contract.id, description: 'dudosa' },
     });
-    app.store.putIncident({
+    await app.store.putIncident({
       id: 'i-open',
       contractId: contract.id,
       description: 'normal',
@@ -233,7 +233,7 @@ describe('POST /incidents/:id/resolve', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ status: 'RESOLVED', resolvedBy: 't-17' });
       expect(res.json().resolvedAt).toEqual(expect.any(String));
-      expect(app.store.getContract(contract.id)?.status).toBe('ACTIVE'); // el servicio no cambia
+      expect((await app.store.getContract(contract.id))?.status).toBe('ACTIVE'); // el servicio no cambia
     },
   );
 
@@ -249,9 +249,9 @@ describe('POST /incidents/:id/resolve', () => {
       payload: { technicianId: 't-17' },
     });
 
-    expect(app.store.listAudit().some((a) => a.event === 'incident_resolved')).toBe(
-      true,
-    );
+    expect(
+      (await app.store.listAudit()).some((a) => a.event === 'incident_resolved'),
+    ).toBe(true);
     expect(logs.join('\n')).toContain('incident_resolved');
     expect(logs.join('\n')).not.toContain('Sin internet');
   });
@@ -274,7 +274,7 @@ describe('POST /incidents/:id/resolve', () => {
 
     expect(second.statusCode).toBe(409);
     expect(second.json()).toMatchObject({ code: 'INCIDENT_ALREADY_RESOLVED' });
-    expect(app.store.getIncident(incident.id)).toMatchObject({
+    expect(await app.store.getIncident(incident.id)).toMatchObject({
       resolvedBy: 't-17',
       resolvedAt: first.json().resolvedAt,
     });
@@ -305,6 +305,6 @@ describe('POST /incidents/:id/resolve', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(app.store.getIncident(incident.id)?.status).toBe('OPEN');
+    expect((await app.store.getIncident(incident.id))?.status).toBe('OPEN');
   });
 });

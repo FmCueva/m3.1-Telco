@@ -49,7 +49,7 @@ describe('POST /webhooks/installation', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ status: 'ACTIVE' });
-    expect(app.store.getContract(contract.id)?.status).toBe('ACTIVE');
+    expect((await app.store.getContract(contract.id))?.status).toBe('ACTIVE');
   });
 
   // @AC-TELCO-015
@@ -68,7 +68,9 @@ describe('POST /webhooks/installation', () => {
     );
 
     expect(res.statusCode).toBe(401);
-    expect(app.store.getContract(contract.id)?.status).toBe('PENDING_INSTALLATION');
+    expect((await app.store.getContract(contract.id))?.status).toBe(
+      'PENDING_INSTALLATION',
+    );
   });
 
   // @AC-TELCO-015
@@ -139,7 +141,7 @@ describe('POST /webhooks/billing', () => {
     });
 
     expect(res.statusCode).toBe(409);
-    expect(app.store.getContract(contract.id)?.status).toBe(status);
+    expect((await app.store.getContract(contract.id))?.status).toBe(status);
   });
 
   // @AC-TELCO-015
@@ -154,6 +156,6 @@ describe('POST /webhooks/billing', () => {
     );
 
     expect(res.statusCode).toBe(401);
-    expect(app.store.getContract(contract.id)?.status).toBe('ACTIVE');
+    expect((await app.store.getContract(contract.id))?.status).toBe('ACTIVE');
   });
 });

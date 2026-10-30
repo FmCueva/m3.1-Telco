@@ -3,6 +3,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { backends } from '../helpers/stores';
 import { buildTestApp } from '../helpers/testApp';
 
 const HIGH = {
@@ -49,10 +50,19 @@ afterEach(async () => {
   await current?.close();
 });
 
-describe('flujo feliz completo', () => {
+describe.each(backends)('flujo feliz completo ($name)', (backend) => {
+  let dispose: (() => Promise<void>) | undefined;
+  afterEach(async () => dispose?.());
+
+  async function appWith(classifier: ReturnType<typeof vi.fn>) {
+    const opened = await backend.open();
+    dispose = opened.dispose;
+    return buildTestApp({ classifier, store: opened.store });
+  }
+
   // @AC-TELCO-003 @AC-TELCO-004 @AC-TELCO-009 @AC-TELCO-013
   it('cliente → KYC → servicio ACTIVE → incidencia en MANUAL_REVIEW → resuelta → métrica', async () => {
-    const app = await buildTestApp({ classifier: vi.fn().mockResolvedValue(LOW) });
+    const app = await appWith(vi.fn().mockResolvedValue(LOW));
     current = app;
     const contractId = await activeService(app);
     expect((await app.inject({ url: `/contracts/${contractId}` })).json().status).toBe(
@@ -80,7 +90,7 @@ describe('flujo feliz completo', () => {
 
   // @AC-TELCO-005 @AC-TELCO-002 @AC-TELCO-007
   it('sugerencia decidida por el técnico y servicio cancelado (terminal) sin nuevas incidencias', async () => {
-    const app = await buildTestApp({ classifier: vi.fn().mockResolvedValue(HIGH) });
+    const app = await appWith(vi.fn().mockResolvedValue(HIGH));
     current = app;
     const contractId = await activeService(app);
 

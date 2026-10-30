@@ -112,7 +112,7 @@ describe('GET /metrics', () => {
       contractId: string,
       data: { status: 'OPEN' | 'MANUAL_REVIEW'; manualReviewAt?: string },
     ) {
-      const incident = app.store.putIncident({
+      const incident = await app.store.putIncident({
         id: crypto.randomUUID(),
         contractId,
         description: 'Sin servicio',
@@ -164,6 +164,53 @@ describe('GET /metrics', () => {
 
       expect(await metrics(app)).toMatch(
         /^incident_manual_review_resolution_seconds_count 0$/m,
+      );
+    });
+  });
+
+  describe('métricas operativas (alertas y SLOs de ops/)', () => {
+    // @AC-TELCO-004
+    it('incidents_manual_review_queue_size cuenta las incidencias en MANUAL_REVIEW', async () => {
+      const { app, contract } = await setup();
+      for (const status of ['MANUAL_REVIEW', 'MANUAL_REVIEW', 'OPEN'] as const) {
+        await app.store.putIncident({
+          id: crypto.randomUUID(),
+          contractId: contract.id,
+          description: 'x',
+          status,
+        });
+      }
+
+      expect(await metrics(app)).toMatch(/^incidents_manual_review_queue_size 2$/m);
+    });
+
+    // @AC-TELCO-007
+    it('http_requests_total distingue ruta, método y código (SLI de SLO-2)', async () => {
+      const { app, contract } = await setup();
+      await app.store.putContract({ ...contract, status: 'CANCELLED' });
+      await app.inject({
+        method: 'POST',
+        url: '/incidents',
+        payload: { contractId: contract.id, description: 'x' },
+      });
+
+      expect(await metrics(app)).toMatch(
+        /^http_requests_total\{route="\/incidents",method="POST",code="409"\} 1$/m,
+      );
+    });
+
+    // @AC-TELCO-007
+    it('http_request_duration_seconds expone el bucket de 0.2 s por ruta (SLI de SLO-1)', async () => {
+      const { app, contract } = await setup();
+      await app.inject({ method: 'GET', url: `/contracts/${contract.id}` });
+
+      const body = await metrics(app);
+
+      expect(body).toMatch(
+        /^http_request_duration_seconds_bucket\{route="\/contracts\/:id",code="200",le="0\.2"\} 1$/m,
+      );
+      expect(body).toMatch(
+        /^http_request_duration_seconds_count\{route="\/contracts\/:id",code="200"\} 1$/m,
       );
     });
   });

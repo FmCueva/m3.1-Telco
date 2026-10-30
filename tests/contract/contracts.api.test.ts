@@ -29,7 +29,7 @@ describe('POST /contracts', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({ code: 'KYC_REQUIRED' });
-    expect(app.store.listContractsByCustomer(customer.id)).toEqual([]);
+    expect(await app.store.listContractsByCustomer(customer.id)).toEqual([]);
   });
 
   // @AC-TELCO-006
@@ -47,7 +47,7 @@ describe('POST /contracts', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ code: 'DEBT_OUTSTANDING' });
-    expect(app.store.listContractsByCustomer(customer.id)).toEqual([]);
+    expect(await app.store.listContractsByCustomer(customer.id)).toEqual([]);
   });
 });
 
@@ -74,7 +74,7 @@ describe('POST /contracts/:id/events', () => {
 describe('POST /incidents', () => {
   // @AC-TELCO-008
   it('servicio inexistente → 404 con shape { code, message } y no se crea incidencia', async () => {
-    const before = app.store.listIncidents().length;
+    const before = (await app.store.listIncidents()).length;
 
     const res = await app.inject({
       method: 'POST',
@@ -87,13 +87,13 @@ describe('POST /incidents', () => {
       code: expect.any(String),
       message: expect.any(String),
     });
-    expect(app.store.listIncidents()).toHaveLength(before);
+    expect(await app.store.listIncidents()).toHaveLength(before);
   });
 
   // @AC-TELCO-007
   it('servicio CANCELLED → 409 SERVICE_CANCELLED y no se crea incidencia', async () => {
     const contract = await seed.contract(app, { status: 'CANCELLED' });
-    const before = app.store.listIncidents().length;
+    const before = (await app.store.listIncidents()).length;
 
     const res = await app.inject({
       method: 'POST',
@@ -103,7 +103,7 @@ describe('POST /incidents', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ code: 'SERVICE_CANCELLED' });
-    expect(app.store.listIncidents()).toHaveLength(before);
+    expect(await app.store.listIncidents()).toHaveLength(before);
   });
 });
 
@@ -127,7 +127,7 @@ describe('POST /suggestions/:id/decision', () => {
         decision,
         decidedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       });
-      expect(app.store.getDecision(suggestion.id)).toMatchObject({ decision });
+      expect(await app.store.getDecision(suggestion.id)).toMatchObject({ decision });
     },
   );
 
@@ -148,7 +148,7 @@ describe('POST /suggestions/:id/decision', () => {
 
     expect(badDecision.statusCode).toBe(400);
     expect(noTechnician.statusCode).toBe(400);
-    expect(app.store.getDecision(suggestion.id)).toBeUndefined();
+    expect(await app.store.getDecision(suggestion.id)).toBeUndefined();
   });
 
   // @AC-TELCO-005
@@ -181,7 +181,7 @@ describe('POST /suggestions/:id/decision', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ code: 'SUGGESTION_ALREADY_DECIDED' });
-    expect(app.store.getDecision(suggestion.id)).toMatchObject({
+    expect(await app.store.getDecision(suggestion.id)).toMatchObject({
       technicianId: 't-17',
       decision: 'ACCEPTED',
     });

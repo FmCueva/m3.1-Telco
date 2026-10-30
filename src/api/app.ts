@@ -23,14 +23,15 @@ import {
 } from '../domain/incidentRules';
 import type { Customer, Incident, ServiceContract } from '../domain/types';
 import { manualReviewResolutionSeconds } from '../domain/queueMetrics';
+import { HttpMetrics } from '../observability/httpMetrics';
 import { histogramLines } from '../observability/histogram';
 import { registerWebhookRoutes } from './webhooks';
 import { logEvent } from '../observability/logger';
-import { InMemoryStore } from './store';
+import { InMemoryStore, type Store } from './store';
 
 declare module 'fastify' {
   interface FastifyInstance {
-    store: InMemoryStore;
+    store: Store;
   }
 }
 
@@ -74,6 +75,7 @@ export type IncidentClassifier = (description: string) => Promise<ClassifierOutc
 export interface BuildAppOptions {
   logger?: boolean;
   classifier?: IncidentClassifier;
+  store?: Store; // por defecto, la DB en memoria; server.ts inyecta PostgreSQL si hay DATABASE_URL
   webhookSecret?: string; // sin secreto, todo webhook se rechaza con 401 (NFR-SEC-001)
 }
 
@@ -122,29 +124,32 @@ function registerCustomerRoutes(app: FastifyInstance): void {
       status: 'PENDING',
       outstandingDebt: 0,
     };
-    return reply.status(201).send(app.store.putCustomer(customer));
+    return reply.status(201).send(await app.store.putCustomer(customer));
   });
 
   app.post<{ Params: IdParams }>('/customers/:id/kyc', async (request, reply) => {
     const { result } = kycBody.parse(request.body);
-    const customer = app.store.getCustomer(request.params.id);
+    const customer = await app.store.getCustomer(request.params.id);
     if (!customer)
       return reply.status(404).send(err('CUSTOMER_NOT_FOUND', 'Cliente no existe'));
-    return app.store.putCustomer({ ...customer, status: result });
+    return await app.store.putCustomer({ ...customer, status: result });
   });
 
   app.get<{ Params: IdParams }>('/customers/:id', async (request, reply) => {
-    const customer = app.store.getCustomer(request.params.id);
+    const customer = await app.store.getCustomer(request.params.id);
     if (!customer)
       return reply.status(404).send(err('CUSTOMER_NOT_FOUND', 'Cliente no existe'));
-    return { ...customer, contracts: app.store.listContractsByCustomer(customer.id) };
+    return {
+      ...customer,
+      contracts: await app.store.listContractsByCustomer(customer.id),
+    };
   });
 }
 
 function registerContractRoutes(app: FastifyInstance): void {
   app.post('/contracts', async (request, reply) => {
     const { customerId, type } = createContractBody.parse(request.body);
-    const customer = app.store.getCustomer(customerId);
+    const customer = await app.store.getCustomer(customerId);
     if (!customer)
       return reply.status(404).send(err('CUSTOMER_NOT_FOUND', 'Cliente no existe'));
     assertCanContract(customer);
@@ -154,11 +159,11 @@ function registerContractRoutes(app: FastifyInstance): void {
       type,
       status: 'DRAFT',
     };
-    return reply.status(201).send(app.store.putContract(contract));
+    return reply.status(201).send(await app.store.putContract(contract));
   });
 
   app.get<{ Params: IdParams }>('/contracts/:id', async (request, reply) => {
-    const contract = app.store.getContract(request.params.id);
+    const contract = await app.store.getContract(request.params.id);
     if (!contract)
       return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Contrato no existe'));
     return contract;
@@ -166,27 +171,27 @@ function registerContractRoutes(app: FastifyInstance): void {
 
   app.post<{ Params: IdParams }>('/contracts/:id/events', async (request, reply) => {
     const { event } = eventBody.parse(request.body);
-    const contract = app.store.getContract(request.params.id);
+    const contract = await app.store.getContract(request.params.id);
     if (!contract)
       return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Contrato no existe'));
     const status = transition(contract.status, event); // lanza InvalidTransitionError → 409
-    return app.store.putContract({ ...contract, status });
+    return await app.store.putContract({ ...contract, status });
   });
 }
 
 // Guarda la sugerencia y la audita (INV-6, NFR-AUDIT-001): solo IDs opacos, nunca la descripción.
-function storeSuggestion(
+async function storeSuggestion(
   app: FastifyInstance,
   incidentId: string,
   outcome: Extract<ClassifierOutcome, { kind: 'suggestion' }>,
 ) {
-  const suggestion = app.store.putSuggestion({
+  const suggestion = await app.store.putSuggestion({
     id: crypto.randomUUID(),
     incidentId,
     ...outcome.suggestion,
     model: outcome.model,
   });
-  app.store.appendAudit({
+  await app.store.appendAudit({
     event: 'suggestion_created',
     suggestionId: suggestion.id,
     occurredAt: new Date().toISOString(),
@@ -213,7 +218,7 @@ function registerIncidentRoutes(
 ): void {
   app.post('/incidents', async (request, reply) => {
     const { contractId, description } = createIncidentBody.parse(request.body);
-    const contract = app.store.getContract(contractId);
+    const contract = await app.store.getContract(contractId);
     if (!contract)
       return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Servicio no existe'));
     assertCanOpenIncident(contract);
@@ -226,32 +231,34 @@ function registerIncidentRoutes(
     };
     if (incident.status === 'MANUAL_REVIEW')
       incident.manualReviewAt = new Date().toISOString();
-    app.store.putIncident(incident);
+    await app.store.putIncident(incident);
     if (outcome?.kind !== 'suggestion') return reply.status(201).send(incident);
 
     return reply.status(201).send({
       ...incident,
-      suggestion: storeSuggestion(app, incident.id, outcome),
+      suggestion: await storeSuggestion(app, incident.id, outcome),
     });
   });
 
   // Cola de revisión manual: GET /incidents?status=MANUAL_REVIEW
   app.get('/incidents', async (request) => {
     const { status } = listIncidentsQuery.parse(request.query);
-    return app.store.listIncidents().filter((i) => !status || i.status === status);
+    return (await app.store.listIncidents()).filter(
+      (i) => !status || i.status === status,
+    );
   });
 }
 
 function registerIncidentResolutionRoutes(app: FastifyInstance): void {
   app.post<{ Params: IdParams }>('/incidents/:id/resolve', async (request, reply) => {
-    const incident = app.store.getIncident(request.params.id);
+    const incident = await app.store.getIncident(request.params.id);
     if (!incident)
       return reply.status(404).send(err('INCIDENT_NOT_FOUND', 'Incidencia no existe'));
     const { technicianId } = resolveBody.parse(request.body);
-    const resolved = app.store.putIncident(
+    const resolved = await app.store.putIncident(
       resolveIncident(incident, technicianId, new Date().toISOString()),
     );
-    app.store.appendAudit({
+    await app.store.appendAudit({
       event: 'incident_resolved',
       incidentId: resolved.id,
       occurredAt: resolved.resolvedAt as string,
@@ -270,19 +277,19 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
     '/suggestions/:id/decision',
     async (request, reply) => {
       const { technicianId, decision } = decisionBody.parse(request.body);
-      const suggestion = app.store.getSuggestion(request.params.id);
+      const suggestion = await app.store.getSuggestion(request.params.id);
       if (!suggestion)
         return reply
           .status(404)
           .send(err('SUGGESTION_NOT_FOUND', 'Sugerencia no existe'));
-      assertNotDecided(app.store.getDecision(suggestion.id));
-      const record = app.store.putDecision({
+      assertNotDecided(await app.store.getDecision(suggestion.id));
+      const record = await app.store.putDecision({
         suggestionId: suggestion.id,
         technicianId,
         decision,
         decidedAt: new Date().toISOString(),
       });
-      app.store.appendAudit({
+      await app.store.appendAudit({
         event: 'suggestion_decision',
         suggestionId: record.suggestionId,
         occurredAt: record.decidedAt,
@@ -303,14 +310,15 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
 const MANUAL_REVIEW_BUCKETS_SECONDS = [900, 3600, 14_400, 28_800, 86_400];
 
 // Métricas AGREGADAS en formato texto de Prometheus (nunca por técnico: EU AI Act, Anexo III.4).
-function registerMetricsRoute(app: FastifyInstance): void {
+function registerMetricsRoute(app: FastifyInstance, http: HttpMetrics): void {
   app.get('/metrics', async (_request, reply) => {
-    const decisions = app.store.listDecisions();
+    const decisions = await app.store.listDecisions();
+    const incidents = await app.store.listIncidents();
     const rate = acceptanceRate(decisions);
     const completeness = auditLogCompleteness({
-      suggestions: app.store.listSuggestions(),
+      suggestions: await app.store.listSuggestions(),
       decisions,
-      audit: app.store.listAudit(),
+      audit: await app.store.listAudit(),
     });
     const lines = [
       '# HELP ai_acceptance_rate Decisiones ACCEPTED sobre el total de decisiones del técnico.',
@@ -322,25 +330,42 @@ function registerMetricsRoute(app: FastifyInstance): void {
       '# HELP audit_log_completeness Entradas de auditoría completas sobre las esperadas (INV-6).',
       '# TYPE audit_log_completeness gauge',
       `audit_log_completeness ${completeness}`,
+      '# HELP incidents_manual_review_queue_size Incidencias a la espera de un técnico (MANUAL_REVIEW).',
+      '# TYPE incidents_manual_review_queue_size gauge',
+      `incidents_manual_review_queue_size ${incidents.filter((i) => i.status === 'MANUAL_REVIEW').length}`,
+      ...http.render(),
       ...histogramLines(
         'incident_manual_review_resolution_seconds',
         'Segundos desde la entrada en MANUAL_REVIEW hasta la resolución (NFR-OPS-001).',
         MANUAL_REVIEW_BUCKETS_SECONDS,
-        manualReviewResolutionSeconds(app.store.listIncidents()),
+        manualReviewResolutionSeconds(incidents),
       ),
     ];
     return reply.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
   });
 }
 
+// Mide cada respuesta por plantilla de ruta (nunca la URL real, que lleva ids). /metrics no se mide.
+function registerHttpMetrics(app: FastifyInstance): HttpMetrics {
+  const http = new HttpMetrics();
+  app.addHook('onResponse', async (request, reply) => {
+    const route = request.routeOptions.url ?? 'unmatched';
+    if (route === '/metrics') return;
+    http.record(route, request.method, reply.statusCode, reply.elapsedTime / 1000);
+  });
+  return http;
+}
+
 export function buildApp({
   logger = false,
   classifier,
   webhookSecret,
+  store = new InMemoryStore(),
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger });
-  app.decorate('store', new InMemoryStore());
+  app.decorate('store', store);
   registerErrorHandling(app);
+  const http = registerHttpMetrics(app);
   app.get('/healthz', async () => ({ status: 'ok' }));
   registerCustomerRoutes(app);
   registerContractRoutes(app);
@@ -348,6 +373,6 @@ export function buildApp({
   registerIncidentResolutionRoutes(app);
   registerSuggestionRoutes(app);
   registerWebhookRoutes(app, webhookSecret);
-  registerMetricsRoute(app);
+  registerMetricsRoute(app, http);
   return app;
 }

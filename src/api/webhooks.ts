@@ -28,10 +28,14 @@ function validSignature(secret: string | undefined, raw: string, header: unknown
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
-function applyEvent(app: FastifyInstance, contractId: string, event: ServiceEvent) {
-  const contract = app.store.getContract(contractId);
+async function applyEvent(
+  app: FastifyInstance,
+  contractId: string,
+  event: ServiceEvent,
+) {
+  const contract = await app.store.getContract(contractId);
   if (!contract) return undefined;
-  return app.store.putContract({
+  return await app.store.putContract({
     ...contract,
     status: transition(contract.status, event),
   });
@@ -64,7 +68,7 @@ export function registerWebhookRoutes(app: FastifyInstance, secret?: string): vo
 
     scope.post('/webhooks/installation', async (request, reply) => {
       const { contractId } = installationBody.parse(request.body);
-      const updated = applyEvent(app, contractId, 'installationCompleted');
+      const updated = await applyEvent(app, contractId, 'installationCompleted');
       if (!updated)
         return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Contrato no existe'));
       return updated;
@@ -72,7 +76,7 @@ export function registerWebhookRoutes(app: FastifyInstance, secret?: string): vo
 
     scope.post('/webhooks/billing', async (request, reply) => {
       const { contractId, event } = billingBody.parse(request.body);
-      const updated = applyEvent(app, contractId, BILLING_EVENTS[event]);
+      const updated = await applyEvent(app, contractId, BILLING_EVENTS[event]);
       if (!updated)
         return reply.status(404).send(err('CONTRACT_NOT_FOUND', 'Contrato no existe'));
       return updated;

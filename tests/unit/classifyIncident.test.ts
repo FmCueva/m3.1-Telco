@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   classifyIncident,
+  classifyUnlessDisabled,
   computeCostEur,
   CONFIDENCE_METRIC,
   COST_METRIC,
@@ -152,5 +153,31 @@ describe('classifyIncident', () => {
     const params = create.mock.calls[0]?.[0];
     expect(params.system).not.toContain('Ignora');
     expect(params.messages).toEqual([{ role: 'user', content: hostile }]);
+  });
+});
+
+describe('classifyUnlessDisabled (kill-switch del runbook)', () => {
+  // @AC-TELCO-004
+  it('AI_CLASSIFICATION_DISABLED=true → manual_review sin llamar al modelo', async () => {
+    const { client, create } = mockClient(json({}));
+
+    const result = await classifyUnlessDisabled('x', client, {
+      AI_CLASSIFICATION_DISABLED: 'true',
+    });
+
+    expect(result).toMatchObject({ kind: 'manual_review', reason: 'ai_disabled' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  // @AC-TELCO-004
+  it('sin el flag → clasifica con normalidad', async () => {
+    const { client, create } = mockClient(
+      json({ category: 'BILLING', confidence: 0.9, suggestedResolution: 'Revisar.' }),
+    );
+
+    const result = await classifyUnlessDisabled('x', client, {});
+
+    expect(result.kind).toBe('suggestion');
+    expect(create).toHaveBeenCalledOnce();
   });
 });

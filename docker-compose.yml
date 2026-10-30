@@ -12,7 +12,9 @@ services:
 
   db:
     image: postgres:16
-    volumes: [pgdata:/var/lib/postgresql/data]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro # el esquema se aplica al crear la DB
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     healthcheck:

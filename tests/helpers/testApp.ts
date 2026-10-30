@@ -27,7 +27,7 @@ export const seed = {
       outstandingDebt: 0,
       ...data,
     };
-    return app.store.putCustomer(customer);
+    return await app.store.putCustomer(customer);
   },
 
   async contract(
@@ -43,14 +43,14 @@ export const seed = {
       ...data,
       customerId,
     };
-    return app.store.putContract(contract);
+    return await app.store.putContract(contract);
   },
 
   async suggestion(
     app: FastifyInstance,
     data: Partial<Suggestion> = {},
   ): Promise<Suggestion> {
-    return app.store.putSuggestion({
+    return await app.store.putSuggestion({
       id: crypto.randomUUID(),
       incidentId: crypto.randomUUID(),
       category: 'OTHER',
