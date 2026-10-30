@@ -57,6 +57,9 @@ describe('POST /incidents con clasificador', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({ status: 'MANUAL_REVIEW' });
+    expect(app.store.getIncident(res.json().id)?.manualReviewAt).toEqual(
+      expect.any(String),
+    ); // @AC-TELCO-013
     expect(res.json().suggestion).toBeUndefined();
     expect(app.store.getContract(contract.id)).toEqual(contract);
   });
@@ -198,5 +201,110 @@ describe('GET /incidents?status=MANUAL_REVIEW', () => {
     const { app } = await setup(LOW_CONFIDENCE);
     const res = await app.inject({ method: 'GET', url: '/incidents?status=NOPE' });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('POST /incidents/:id/resolve', () => {
+  async function openIncident(outcome: Outcome = SUGGESTION) {
+    const { app, contract } = await setup(outcome);
+    const created = await app.inject({
+      method: 'POST',
+      url: '/incidents',
+      payload: { contractId: contract.id, description: 'Sin internet' },
+    });
+    return { app, contract, incident: created.json() };
+  }
+
+  // @AC-TELCO-009
+  it.each([
+    ['OPEN', SUGGESTION],
+    ['MANUAL_REVIEW', LOW_CONFIDENCE],
+  ] as const)(
+    '%s → 200 y RESOLVED con técnico y marca de tiempo',
+    async (_s, outcome) => {
+      const { app, contract, incident } = await openIncident(outcome);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/incidents/${incident.id}/resolve`,
+        payload: { technicianId: 't-17' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ status: 'RESOLVED', resolvedBy: 't-17' });
+      expect(res.json().resolvedAt).toEqual(expect.any(String));
+      expect(app.store.getContract(contract.id)?.status).toBe('ACTIVE'); // el servicio no cambia
+    },
+  );
+
+  // @AC-TELCO-009
+  it('resolver deja una entrada de auditoría y un log sin PII', async () => {
+    const logs: string[] = [];
+    setLogSink((line) => logs.push(line));
+    const { app, incident } = await openIncident();
+
+    await app.inject({
+      method: 'POST',
+      url: `/incidents/${incident.id}/resolve`,
+      payload: { technicianId: 't-17' },
+    });
+
+    expect(app.store.listAudit().some((a) => a.event === 'incident_resolved')).toBe(
+      true,
+    );
+    expect(logs.join('\n')).toContain('incident_resolved');
+    expect(logs.join('\n')).not.toContain('Sin internet');
+  });
+
+  // @AC-TELCO-010
+  it('resolver dos veces → 409 INCIDENT_ALREADY_RESOLVED y no cambia', async () => {
+    const { app, incident } = await openIncident();
+    const url = `/incidents/${incident.id}/resolve`;
+    const first = await app.inject({
+      method: 'POST',
+      url,
+      payload: { technicianId: 't-17' },
+    });
+
+    const second = await app.inject({
+      method: 'POST',
+      url,
+      payload: { technicianId: 't-99' },
+    });
+
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toMatchObject({ code: 'INCIDENT_ALREADY_RESOLVED' });
+    expect(app.store.getIncident(incident.id)).toMatchObject({
+      resolvedBy: 't-17',
+      resolvedAt: first.json().resolvedAt,
+    });
+  });
+
+  // @AC-TELCO-011
+  it('incidencia inexistente → 404 INCIDENT_NOT_FOUND', async () => {
+    const { app } = await setup(SUGGESTION);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/incidents/no-existe/resolve',
+      payload: { technicianId: 't-17' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ code: 'INCIDENT_NOT_FOUND' });
+  });
+
+  // @AC-TELCO-012
+  it('sin technicianId → 400 y la incidencia sigue OPEN', async () => {
+    const { app, incident } = await openIncident();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/incidents/${incident.id}/resolve`,
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(app.store.getIncident(incident.id)?.status).toBe('OPEN');
   });
 });

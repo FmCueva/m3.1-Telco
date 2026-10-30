@@ -1,7 +1,7 @@
 # Spec — Ciclo de vida del servicio e incidencias con IA
 
 > **ESTADO: VALIDADA.** Deriva de `specs/srs-telco.md`: FR-DOM-004 a FR-DOM-012 (ciclo de vida del servicio) y FR-DOM-013 y
-> FR-DOM-014 (incidencias y clasificación por IA), más FR-DOM-015 y FR-DOM-016 (deuda y servicio CANCELLED).
+> FR-DOM-014 (incidencias y clasificación por IA), más FR-DOM-015 y FR-DOM-016 (deuda y servicio CANCELLED), más FR-DOM-017 (resolución de incidencias) y NFR-OPS-001 (SLO de la cola MANUAL_REVIEW).
 
 ## 1. Máquina de estados del servicio
 
@@ -71,6 +71,7 @@ operación silenciosa sin efecto, y no existe ninguna transición que salga de `
 | INV-7 | Los registros y logs usan solo identificadores opacos (`customer_id: c-721`); ninguno contiene nombre, teléfono ni documento de identidad. | Test que inspecciona los logs del flujo completo (NFR-AUDIT-001). | NFR-AUDIT-001 |
 | INV-8 | No se crea un servicio para un cliente con deuda pendiente mayor que 0; la API responde 409 con code `DEBT_OUTSTANDING`. | Unit test de la regla y contract test de HTTP 409. | FR-DOM-015 |
 | INV-9 | No se registra una incidencia sobre un servicio inexistente (HTTP 404) ni sobre un servicio `CANCELLED` (HTTP 409, code `SERVICE_CANCELLED`); en ambos casos no se crea la incidencia. | Unit test de la regla y contract test de HTTP 404 y 409. | FR-DOM-013, FR-DOM-016 |
+| INV-10 | `RESOLVED` es terminal para la incidencia: solo `OPEN` y `MANUAL_REVIEW` pueden resolverse (HTTP 409 `INCIDENT_ALREADY_RESOLVED` en otro caso), la resolución exige un `technicianId` opaco, y no aplica sugerencias de la IA ni modifica el servicio (INV-6). | Unit test de la regla y contract test de HTTP 200, 400, 404 y 409. | FR-DOM-017 |
 
 ### 2.1 Contratos de los endpoints clave (precondición · postcondición · invariantes)
 
@@ -82,6 +83,7 @@ ejecutables estas tres patas; aquí quedan nombradas por endpoint.
 | `POST /contracts` | Cliente con KYC `VERIFIED` y sin deuda pendiente. | Contrato persistido en `DRAFT`. | INV-1, INV-4, INV-8 |
 | `POST /contracts/:id/events` | La transición (estado, evento) está en la tabla. | Estado actualizado. | INV-2, INV-3 |
 | `POST /incidents` | El servicio existe y no está `CANCELLED`. | Incidencia persistida; en `MANUAL_REVIEW` si `confidence < 0.8`. | INV-5, INV-9 |
+| `POST /incidents/:id/resolve` | La incidencia existe, está en `OPEN` o `MANUAL_REVIEW` y el cuerpo trae `technicianId`. | Incidencia en `RESOLVED` con `resolvedBy` y `resolvedAt`; auditoría `incident_resolved`. | INV-6, INV-10 |
 
 ## 3. Criterios de aceptación (Gherkin)
 
@@ -135,6 +137,42 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
     Given un identificador de servicio que no existe
     When se registra una incidencia sobre ese servicio
     Then la respuesta es HTTP 404 con code y message y no se crea ninguna incidencia
+
+  @AC-TELCO-009
+  Scenario: El técnico resuelve una incidencia abierta
+    Given una incidencia en estado OPEN o MANUAL_REVIEW
+    When el técnico t-17 la resuelve
+    Then la respuesta es HTTP 200, la incidencia queda RESOLVED con resolvedBy t-17 y resolvedAt, y el servicio no cambia
+
+  @AC-TELCO-010
+  Scenario: RESOLVED es terminal para la incidencia
+    Given una incidencia en estado RESOLVED
+    When el técnico intenta resolverla de nuevo
+    Then la respuesta es HTTP 409 con code INCIDENT_ALREADY_RESOLVED y la incidencia no cambia
+
+  @AC-TELCO-011
+  Scenario: No se resuelve una incidencia inexistente
+    Given un identificador de incidencia que no existe
+    When el técnico intenta resolverla
+    Then la respuesta es HTTP 404 con code INCIDENT_NOT_FOUND
+
+  @AC-TELCO-012
+  Scenario: La resolución exige técnico identificado
+    Given una incidencia en estado OPEN
+    When se resuelve sin technicianId
+    Then la respuesta es HTTP 400 y la incidencia permanece OPEN
+
+  @AC-TELCO-013
+  Scenario: Se mide el tiempo de resolución de una incidencia de MANUAL_REVIEW
+    Given una incidencia que entró en MANUAL_REVIEW hace 5 horas
+    When el técnico la resuelve
+    Then GET /metrics cuenta una observación de 5 horas en incident_manual_review_resolution_seconds, fuera del bucket de 4 horas
+
+  @AC-TELCO-014
+  Scenario: Solo cuentan las incidencias que pasaron por MANUAL_REVIEW
+    Given una incidencia que nunca estuvo en MANUAL_REVIEW
+    When el técnico la resuelve
+    Then GET /metrics no añade ninguna observación a incident_manual_review_resolution_seconds
 ```
 
 ## 4. Trazabilidad
@@ -146,5 +184,7 @@ Feature: Ciclo de vida del servicio e incidencias con IA bajo control humano
 | INV-5, INV-6, AC-TELCO-004, AC-TELCO-005 | FR-DOM-013, FR-DOM-014, NFR-AI-001, NFR-AUDIT-001 |
 | INV-8, AC-TELCO-006 | FR-DOM-015 |
 | INV-9, AC-TELCO-007, AC-TELCO-008 | FR-DOM-013, FR-DOM-016 |
+| INV-10, AC-TELCO-009, AC-TELCO-010, AC-TELCO-011, AC-TELCO-012 | FR-DOM-017 |
+| AC-TELCO-013, AC-TELCO-014 | NFR-OPS-001 |
 | AC-TELCO-001 | FR-DOM-009, NFR-SEC-001 |
 | AC-TELCO-002 | FR-DOM-007 |

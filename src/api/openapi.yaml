@@ -213,13 +213,29 @@ paths:
       summary: Resolución de la incidencia por el técnico
       parameters:
         - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [technicianId]
+              properties:
+                technicianId:
+                  { type: string, description: 'Identificador opaco (t-17)' }
       responses:
         '200':
-          description: Incidencia resuelta (status RESOLVED)
+          description: Incidencia resuelta (status RESOLVED, resolvedBy, resolvedAt)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La incidencia ya está resuelta (code INCIDENT_ALREADY_RESOLVED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /metrics:
     get:
       summary: Métricas agregadas de supervisión humana (formato Prometheus)
@@ -328,6 +344,8 @@ components:
         contractId: { type: string }
         description: { type: string }
         status: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
+        resolvedBy: { type: string }
+        resolvedAt: { type: string, format: date-time }
         suggestion:
           type: object
           description: Solo si la IA sugirió con confianza >= 0.8; pendiente del técnico

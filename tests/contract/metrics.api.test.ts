@@ -103,4 +103,68 @@ describe('GET /metrics', () => {
     expect(body).not.toContain('t-17');
     expect(body).not.toMatch(/technician/i);
   });
+
+  describe('incident_manual_review_resolution_seconds (NFR-OPS-001)', () => {
+    const HOURS = 3_600_000;
+
+    async function resolveSeeded(
+      app: FastifyInstance,
+      contractId: string,
+      data: { status: 'OPEN' | 'MANUAL_REVIEW'; manualReviewAt?: string },
+    ) {
+      const incident = app.store.putIncident({
+        id: crypto.randomUUID(),
+        contractId,
+        description: 'Sin servicio',
+        ...data,
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/incidents/${incident.id}/resolve`,
+        payload: { technicianId: 't-17' },
+      });
+    }
+
+    // @AC-TELCO-013
+    it('resuelta tras 5 h → cuenta en +Inf y fuera del bucket de 4 h', async () => {
+      const { app, contract } = await setup();
+      await resolveSeeded(app, contract.id, {
+        status: 'MANUAL_REVIEW',
+        manualReviewAt: new Date(Date.now() - 5 * HOURS).toISOString(),
+      });
+
+      const body = await metrics(app);
+
+      expect(body).toMatch(
+        /^incident_manual_review_resolution_seconds_bucket\{le="14400"\} 0$/m,
+      );
+      expect(body).toMatch(
+        /^incident_manual_review_resolution_seconds_bucket\{le="\+Inf"\} 1$/m,
+      );
+      expect(body).toMatch(/^incident_manual_review_resolution_seconds_count 1$/m);
+    });
+
+    // @AC-TELCO-013
+    it('resuelta tras 1 h → dentro del bucket de 4 h', async () => {
+      const { app, contract } = await setup();
+      await resolveSeeded(app, contract.id, {
+        status: 'MANUAL_REVIEW',
+        manualReviewAt: new Date(Date.now() - 1 * HOURS).toISOString(),
+      });
+
+      expect(await metrics(app)).toMatch(
+        /^incident_manual_review_resolution_seconds_bucket\{le="14400"\} 1$/m,
+      );
+    });
+
+    // @AC-TELCO-014
+    it('incidencia que nunca estuvo en MANUAL_REVIEW → count 0', async () => {
+      const { app, contract } = await setup();
+      await resolveSeeded(app, contract.id, { status: 'OPEN' });
+
+      expect(await metrics(app)).toMatch(
+        /^incident_manual_review_resolution_seconds_count 0$/m,
+      );
+    });
+  });
 });

@@ -39,6 +39,9 @@ export interface Incident {
   contractId: string;
   description: string;
   status: IncidentStatus;
+  manualReviewAt?: string; // ISO 8601: entrada en la cola MANUAL_REVIEW (NFR-OPS-001)
+  resolvedBy?: string; // identificador opaco del técnico (FR-DOM-017)
+  resolvedAt?: string; // ISO 8601
 }
 
 // INV-6: la IA solo sugiere; la decisión es siempre de un técnico humano y queda registrada.
@@ -62,10 +65,11 @@ export interface SuggestionDecisionRecord {
 
 // Registro de auditoría (NFR-AUDIT-001): una entrada por sugerencia y una por decisión.
 export interface AuditEntry {
-  event: 'suggestion_created' | 'suggestion_decision';
-  suggestionId: string;
+  event: 'suggestion_created' | 'suggestion_decision' | 'incident_resolved';
+  suggestionId?: string; // ausente en incident_resolved
+  incidentId?: string; // incident_resolved
   occurredAt: string; // ISO 8601
   model?: string; // suggestion_created
-  technicianId?: string; // suggestion_decision, opaco
+  technicianId?: string; // suggestion_decision e incident_resolved, opaco
   decision?: SuggestionDecision; // suggestion_decision
 }

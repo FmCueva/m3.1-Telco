@@ -16,8 +16,14 @@ import {
 } from '../domain/suggestionRules';
 import { InvalidTransitionError, transition } from '../domain/serviceTransitions';
 import { acceptanceRate, auditLogCompleteness } from '../domain/auditMetrics';
-import { statusAfterClassification } from '../domain/incidentRules';
+import {
+  IncidentAlreadyResolvedError,
+  resolveIncident,
+  statusAfterClassification,
+} from '../domain/incidentRules';
 import type { Customer, Incident, ServiceContract } from '../domain/types';
+import { manualReviewResolutionSeconds } from '../domain/queueMetrics';
+import { histogramLines } from '../observability/histogram';
 import { logEvent } from '../observability/logger';
 import { InMemoryStore } from './store';
 
@@ -45,6 +51,7 @@ const decisionBody = z.object({
   technicianId: z.string().min(1),
   decision: z.enum(['ACCEPTED', 'MODIFIED', 'REJECTED']),
 });
+const resolveBody = z.object({ technicianId: z.string().min(1) });
 const createIncidentBody = z.object({
   contractId: z.string().min(1),
   description: z.string().min(1),
@@ -77,6 +84,7 @@ function domainStatus(error: unknown): number | undefined {
   if (error instanceof DebtOutstandingError) return 409; // INV-8
   if (error instanceof ServiceCancelledError) return 409; // INV-9
   if (error instanceof SuggestionAlreadyDecidedError) return 409; // INV-6
+  if (error instanceof IncidentAlreadyResolvedError) return 409; // INV-10
   return undefined;
 }
 
@@ -214,6 +222,8 @@ function registerIncidentRoutes(
       description,
       status: outcome ? statusAfterClassification(outcome.kind) : 'OPEN',
     };
+    if (incident.status === 'MANUAL_REVIEW')
+      incident.manualReviewAt = new Date().toISOString();
     app.store.putIncident(incident);
     if (outcome?.kind !== 'suggestion') return reply.status(201).send(incident);
 
@@ -228,12 +238,28 @@ function registerIncidentRoutes(
     const { status } = listIncidentsQuery.parse(request.query);
     return app.store.listIncidents().filter((i) => !status || i.status === status);
   });
+}
 
+function registerIncidentResolutionRoutes(app: FastifyInstance): void {
   app.post<{ Params: IdParams }>('/incidents/:id/resolve', async (request, reply) => {
     const incident = app.store.getIncident(request.params.id);
     if (!incident)
       return reply.status(404).send(err('INCIDENT_NOT_FOUND', 'Incidencia no existe'));
-    return app.store.putIncident({ ...incident, status: 'RESOLVED' });
+    const { technicianId } = resolveBody.parse(request.body);
+    const resolved = app.store.putIncident(
+      resolveIncident(incident, technicianId, new Date().toISOString()),
+    );
+    app.store.appendAudit({
+      event: 'incident_resolved',
+      incidentId: resolved.id,
+      occurredAt: resolved.resolvedAt as string,
+      technicianId,
+    });
+    logEvent('incident_resolved', {
+      incident_id: resolved.id,
+      technician_id: technicianId,
+    });
+    return resolved;
   });
 }
 
@@ -271,6 +297,9 @@ function registerSuggestionRoutes(app: FastifyInstance): void {
   );
 }
 
+// 14 400 s = 4 h: el umbral del SLO-3 (NFR-OPS-001) debe ser un límite de bucket.
+const MANUAL_REVIEW_BUCKETS_SECONDS = [900, 3600, 14_400, 28_800, 86_400];
+
 // Métricas AGREGADAS en formato texto de Prometheus (nunca por técnico: EU AI Act, Anexo III.4).
 function registerMetricsRoute(app: FastifyInstance): void {
   app.get('/metrics', async (_request, reply) => {
@@ -291,6 +320,12 @@ function registerMetricsRoute(app: FastifyInstance): void {
       '# HELP audit_log_completeness Entradas de auditoría completas sobre las esperadas (INV-6).',
       '# TYPE audit_log_completeness gauge',
       `audit_log_completeness ${completeness}`,
+      ...histogramLines(
+        'incident_manual_review_resolution_seconds',
+        'Segundos desde la entrada en MANUAL_REVIEW hasta la resolución (NFR-OPS-001).',
+        MANUAL_REVIEW_BUCKETS_SECONDS,
+        manualReviewResolutionSeconds(app.store.listIncidents()),
+      ),
     ];
     return reply.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
   });
@@ -307,6 +342,7 @@ export function buildApp({
   registerCustomerRoutes(app);
   registerContractRoutes(app);
   registerIncidentRoutes(app, classifier);
+  registerIncidentResolutionRoutes(app);
   registerSuggestionRoutes(app);
   registerMetricsRoute(app);
   return app;

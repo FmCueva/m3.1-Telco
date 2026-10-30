@@ -28,6 +28,23 @@ groups:
           summary: 'Cola MANUAL_REVIEW saturada ({{ $value }} incidencias)'
           runbook_url: 'https://runbooks.master-ia.dev/telco/cola-incidencias?value={{ $value }}'
 
+      - alert: ManualReviewResolutionBurnRateHigh
+        # ¿Estoy quemando >2% del error budget de SLO-3 en 1h?
+        # Umbral = 2% del budget de 28 d (672 h) consumido en 1 h:
+        #   0.02 × 672 × 0.05 = 0.672  (más del 67 % de las resueltas en 1 h supera las 4 h)
+        expr: |
+          (
+            1 -
+            sum(increase(incident_manual_review_resolution_seconds_bucket{le="14400"}[1h]))
+            /
+            sum(increase(incident_manual_review_resolution_seconds_count[1h]))
+          ) > 0.02 * 672 * 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Burn rate alto en el tiempo de resolución de MANUAL_REVIEW (SLO-3)'
+          runbook_url: 'https://runbooks.master-ia.dev/telco/cola-incidencias'
+
       - alert: AiCostBudgetExceeded
         # sum by (le): imprescindible para que la quantile sobreviva a >1 instancia
         expr: histogram_quantile(0.95, sum by (le) (rate(ai_cost_per_incident_eur_bucket[1h]))) > 0.01
