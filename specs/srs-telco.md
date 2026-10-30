@@ -1,6 +1,6 @@
 # SRS — Backend de operadora TELCO
 
-> **VERSIÓN: 1.3** · **ESTADO: VALIDADA** · Última actualización: 2026-10-29.
+> **VERSIÓN: 1.4** · **ESTADO: VALIDADA** · Última actualización: 2026-10-29.
 
 ## 1. Propósito y alcance
 
@@ -64,6 +64,7 @@
 | NFR-AI-001 | La salida del clasificador se valida con `zod`; el 100 % de las respuestas con JSON roto o fuera del esquema genera una incidencia en revisión manual sin lanzar excepción; el coste por llamada se calcula y se registra como métrica en cada clasificación. | Tests del clasificador con el SDK mockeado (0 tokens): respuesta válida, JSON roto y confianza baja; comprobación de la métrica de coste. |
 | NFR-QUAL-001 | La cobertura de líneas de la suite de tests es de al menos el 80 % y toda prueba lleva una etiqueta `@AC-TELCO-nnn`; el pipeline de CI falla si cualquiera de las dos condiciones no se cumple. | Gate de cobertura (`scripts/coverage-gate.ts`) y gate de trazabilidad (`scripts/check-ac-coverage.sh`) en CI. |
 | NFR-OPS-001 | El 95 % de las incidencias que entran en `MANUAL_REVIEW` se resuelve en menos de 4 horas, medido sobre una ventana de 28 días móviles. El sistema expone el tiempo desde la entrada en `MANUAL_REVIEW` hasta la resolución como histograma agregado (`incident_manual_review_resolution_seconds`, con un límite de bucket en 14 400 s), sin identificadores de técnico. | Test unitario del cálculo de duraciones, test de contrato de `GET /metrics` y SLO-3 en `ops/slos.md` con su alerta. |
+| NFR-DISP-001 | El 99,5 % de las peticiones `POST /incidents` devuelve un código distinto de 5xx, medido sobre una ventana de 28 días móviles. | SLO-2 en `ops/slos.md` y alerta `IncidentsBurnRateHigh` en `ops/alerts.yml`. |
 
 ## 5. Restricciones
 

@@ -3,7 +3,7 @@
 > **ESTADO: REVISIÓN PARCIAL.** Redactado con asistencia de IA. La clasificación del
 > riesgo y la aceptación de los riesgos residuales las decide el ingeniero responsable, no la IA.
 > **Relación con la implementación.** Este documento es parte de la spec: cada riesgo se convierte
-> en un requisito verificable (INV-5, INV-6, INV-7, NFR-AI-001, NFR-AUDIT-001, NFR-COST-001) y el
+> en un requisito verificable (INV-5, INV-6, INV-7, NFR-AI-001, NFR-AUDIT-001, NFR-AI-001) y el
 > clasificador (`src/ai/classifyIncident.ts`) lo implementa. La sección 2.4 indica qué controles
 > ya están en el código y cuáles quedan pendientes. Cualquier cambio de modelo, prompt
 > o alcance del clasificador se refleja primero aquí.
@@ -63,7 +63,7 @@ Probabilidad (P) e impacto (I): B = bajo, M = medio, A = alto. Riesgo residual t
 | R-08 | **Falta de trazabilidad**: no se puede reconstruir quién decidió qué sobre una sugerencia. | B | A | Cada sugerencia y cada decisión se registra con `suggestion_id`, técnico opaco, decisión, modelo y marca de tiempo (INV-6, NFR-AUDIT-001). | Métrica `audit_log_completeness` (alerta crítica < 99,9 %). | Bajo |
 | R-09 | **Sesgo o trato desigual** por idioma, forma de escribir o tipo de cliente. | B | M | El modelo solo ve la descripción, sin datos demográficos ni del contrato; las sugerencias no alteran condiciones del servicio. | Muestreo periódico de la tasa de `manual_review` y de aceptación por idioma y canal. **Pendiente:** definir quién ejecuta ese muestreo y con qué frecuencia. | Bajo |
 | R-10 | **Indisponibilidad del proveedor de IA**. | M | B | Error del proveedor → `manual_review` (`ai_error`); el flujo de incidencias no depende de la IA para registrarse. | Test de error del proveedor; `ops/gameday-01-proveedor-ia.md`. | Bajo |
-| R-11 | **Sobrecoste** por uso descontrolado o cambio de modelo. | B | B | Modelo pequeño; coste por llamada calculado con `response.usage` y registrado en `ai_cost_per_incident_eur`; alerta con p95 > 0,01 € (NFR-COST-001). | Test de cálculo y registro del coste; alerta `AiCostBudgetExceeded`. | Bajo |
+| R-11 | **Sobrecoste** por uso descontrolado o cambio de modelo. | B | B | Modelo pequeño; coste por llamada calculado con `response.usage` y registrado en `ai_cost_per_incident_eur`; alerta con p95 > 0,01 € (NFR-AI-001). | Test de cálculo y registro del coste; alerta `AiCostBudgetExceeded`. | Bajo |
 | R-12 | **Dependencia del proveedor / cambio de modelo** altera el comportamiento sin aviso. | B | M | Modelo fijado por constante `MODEL`; tests con SDK mockeado; la deriva se detecta por `ai_confidence` y `ai_acceptance_rate`. | Revisión de este documento ante cualquier cambio de `MODEL`. | Bajo |
 
 ### 2.1 Controles organizativos, responsables y umbrales
@@ -90,7 +90,7 @@ cierra el ciclo; si un riesgo no tiene requisito, no está gestionado.
 | R-03, R-05 | INV-5 y NFR-AI-001: validación `zod` y umbral `confidence < 0.8` → `MANUAL_REVIEW`. | Tests con SDK mockeado (@AC-TELCO-004). |
 | R-07 | INV-7 y NFR-AUDIT-001: cero PII en logs. | Test que inspecciona los logs; debe romper el build, no ser una promesa. |
 | R-04, R-12 | Métricas `ai_confidence` y `ai_invalid_output_total` en operación, más las puertas técnicas anteriores en línea. | Alertas en `ops/alerts.yml`. |
-| R-11 | NFR-COST-001: coste por llamada registrado, alerta con p95 > 0,01 €. | Test de cálculo y registro del coste. |
+| R-11 | NFR-AI-001: coste por llamada registrado, alerta con p95 > 0,01 €. | Test de cálculo y registro del coste. |
 
 ### 2.3 Dónde NO se usa la IA
 

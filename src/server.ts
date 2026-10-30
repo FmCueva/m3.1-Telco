@@ -6,6 +6,7 @@ import { buildApp } from './api/app';
 // Raíz de composición: único sitio que une la API con el módulo ai (ADR-001).
 const app = buildApp({
   logger: true,
+  webhookSecret: process.env.WEBHOOK_SECRET,
   classifier: (description) => classifyIncident(description),
 });
 

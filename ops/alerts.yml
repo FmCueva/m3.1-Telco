@@ -51,7 +51,7 @@ groups:
         for: 15m
         labels: { severity: warning }
         annotations:
-          summary: 'Coste IA p95 por incidencia fuera de presupuesto (NFR-COST-001)'
+          summary: 'Coste IA p95 por incidencia fuera de presupuesto (NFR-AI-001, presupuesto SRS §5)'
           runbook_url: 'https://runbooks.master-ia.dev/telco/ai-cost'
 
       - alert: AuditLogIncomplete
