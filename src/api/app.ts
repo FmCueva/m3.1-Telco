@@ -39,15 +39,9 @@ const createContractBody = z.object({
   customerId: z.string().min(1),
   type: z.enum(['FIBER', 'MOBILE', 'PACK']),
 });
-const eventBody = z.object({
-  event: z.enum([
-    'confirm',
-    'installationCompleted',
-    'paymentDefault',
-    'paymentRegularized',
-    'cancel',
-  ]),
-});
+// Solo los eventos del cliente interno. Instalación y facturación llegan por webhook firmado
+// (src/api/webhooks.ts, NFR-SEC-001): por esta ruta pública no se aceptan.
+const eventBody = z.object({ event: z.enum(['confirm', 'cancel']) });
 const kycBody = z.object({ result: z.enum(['VERIFIED', 'REJECTED']) });
 const decisionBody = z.object({
   technicianId: z.string().min(1),

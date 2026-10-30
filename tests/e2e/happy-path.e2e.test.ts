@@ -1,6 +1,7 @@
 // tests/e2e/happy-path.e2e.test.ts — flujo feliz completo, solo por HTTP (sin sembrar el store).
 // El clasificador se inyecta falso (0 tokens): se prueba el flujo, no el modelo.
 
+import { createHmac } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { backends } from '../helpers/stores';
@@ -21,6 +22,8 @@ const LOW = {
   model: 'claude-haiku-4-5',
 };
 
+const WEBHOOK_SECRET = 'secreto-e2e';
+
 let current: FastifyInstance | undefined;
 
 async function post(app: FastifyInstance, url: string, payload: object = {}) {
@@ -40,8 +43,16 @@ async function activeService(app: FastifyInstance) {
     await post(app, '/contracts', { customerId: customer.id, type: 'FIBER' })
   ).json();
   await post(app, `/contracts/${contract.id}/events`, { event: 'confirm' });
-  await post(app, `/contracts/${contract.id}/events`, {
-    event: 'installationCompleted',
+  // La instalación la notifica el sistema externo por webhook firmado (NFR-SEC-001).
+  const body = JSON.stringify({ contractId: contract.id });
+  await app.inject({
+    method: 'POST',
+    url: '/webhooks/installation',
+    headers: {
+      'content-type': 'application/json',
+      'x-signature': createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex'),
+    },
+    payload: body,
   });
   return contract.id as string;
 }
@@ -57,7 +68,11 @@ describe.each(backends)('flujo feliz completo ($name)', (backend) => {
   async function appWith(classifier: ReturnType<typeof vi.fn>) {
     const opened = await backend.open();
     dispose = opened.dispose;
-    return buildTestApp({ classifier, store: opened.store });
+    return buildTestApp({
+      classifier,
+      store: opened.store,
+      webhookSecret: WEBHOOK_SECRET,
+    });
   }
 
   // @AC-TELCO-003 @AC-TELCO-004 @AC-TELCO-009 @AC-TELCO-013

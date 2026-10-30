@@ -141,7 +141,7 @@ paths:
               type: object
               required: [event]
               properties:
-                event: { $ref: '#/components/schemas/ServiceEvent' }
+                event: { type: string, enum: [confirm, cancel] }
       responses:
         '200':
           description: Transición aplicada, Contrato actualizado.

@@ -71,6 +71,29 @@ describe('POST /contracts/:id/events', () => {
   });
 });
 
+describe('POST /contracts/:id/events no admite eventos de sistemas externos (NFR-SEC-001)', () => {
+  // @AC-TELCO-015
+  it.each([
+    ['PENDING_INSTALLATION', 'installationCompleted'],
+    ['ACTIVE', 'paymentDefault'],
+    ['SUSPENDED', 'paymentRegularized'],
+  ] as const)(
+    '%s + %s sin firma → 400 y el estado NO cambia',
+    async (status, event) => {
+      const contract = await seed.contract(app, { status });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/contracts/${contract.id}/events`,
+        payload: { event },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect((await app.store.getContract(contract.id))?.status).toBe(status);
+    },
+  );
+});
+
 describe('POST /incidents', () => {
   // @AC-TELCO-008
   it('servicio inexistente → 404 con shape { code, message } y no se crea incidencia', async () => {
