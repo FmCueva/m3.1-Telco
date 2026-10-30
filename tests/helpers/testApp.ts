@@ -5,11 +5,13 @@
 // CANCELLED.
 
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../src/api/app';
-import type { Customer, ServiceContract } from '../../src/domain/types';
+import { buildApp, type BuildAppOptions } from '../../src/api/app';
+import type { Customer, ServiceContract, Suggestion } from '../../src/domain/types';
 
-export async function buildTestApp(): Promise<FastifyInstance> {
-  const app = buildApp(); // store en memoria nuevo: cada suite arranca limpia
+export async function buildTestApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
+  const app = buildApp(options); // store en memoria nuevo: cada suite arranca limpia
   await app.ready();
   return app;
 }
@@ -25,7 +27,7 @@ export const seed = {
       outstandingDebt: 0,
       ...data,
     };
-    return app.store.putCustomer(customer);
+    return await app.store.putCustomer(customer);
   },
 
   async contract(
@@ -41,6 +43,21 @@ export const seed = {
       ...data,
       customerId,
     };
-    return app.store.putContract(contract);
+    return await app.store.putContract(contract);
+  },
+
+  async suggestion(
+    app: FastifyInstance,
+    data: Partial<Suggestion> = {},
+  ): Promise<Suggestion> {
+    return await app.store.putSuggestion({
+      id: crypto.randomUUID(),
+      incidentId: crypto.randomUUID(),
+      category: 'OTHER',
+      confidence: 0.9,
+      suggestedResolution: 'Revisar.',
+      model: 'claude-haiku-4-5',
+      ...data,
+    });
   },
 };

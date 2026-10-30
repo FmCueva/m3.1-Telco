@@ -1,4 +1,4 @@
-# Plan de construcción TELCO — borrador generado por IA (prompt 03, segunda versión), pendiente de revisión humana.
+# Plan de construcción TELCO — generado por IA y revisado por el humano (prompt 03, segunda versión).
 # Deriva de: specs/srs-telco.md, specs/spec-servicio.md, specs/adr/ADR-001 y ADR-002.
 # Estructura: fase -> JOBs (slices verticales de punta a punta) -> tareas.
 # Las tareas (horas) van dentro del JOB y solo se detallan para el JOB que se implementa a continuación (JOB-002).
@@ -13,7 +13,7 @@ fase:
   quality_gate_fase:
     - "CI en verde: lint (Prettier + ESLint), tests, dependency-cruiser, gate de cobertura y gate de trazabilidad."
     - "Cobertura de líneas >= 80 % (NFR-QUAL-001)."
-    - "Los 5 criterios AC-TELCO-001 a AC-TELCO-005 tienen al menos un test etiquetado y en verde."
+    - "Los 8 criterios AC-TELCO-001 a AC-TELCO-008 tienen al menos un test etiquetado y en verde."
     - "Todo test lleva una etiqueta @AC-TELCO-nnn."
     - "Todo JOB traza a al menos un requisito del SRS."
     - "0 apariciones de PII en los logs del flujo completo (NFR-AUDIT-001)."
@@ -97,12 +97,13 @@ jobs:
     name: Contratación de servicio con KYC verificado
     owner: Fernando
     priority: Must
-    requirements: [FR-DOM-003, FR-DOM-004]
+    requirements: [FR-DOM-003, FR-DOM-004, FR-DOM-015]
     dependencies: [JOB-002, JOB-003]
     deliverables:
       - "POST /contracts (módulo contracts) que crea el servicio en DRAFT."
     acceptance:
-      - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 422 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
+      - "POST /contracts para un cliente con KYC distinto de VERIFIED devuelve HTTP 403 y no crea ningún servicio (INV-4, @AC-TELCO-003)."
+      - "POST /contracts para un cliente VERIFIED con deuda pendiente devuelve HTTP 409 con code DEBT_OUTSTANDING y no crea ningún servicio (INV-8, @AC-TELCO-006)."
       - "POST /contracts con tipo FIBER, MOBILE o PACK para un cliente VERIFIED devuelve HTTP 201 y el servicio queda persistido en DRAFT."
       - "POST /contracts con cualquier otro tipo devuelve HTTP 400."
       - "Un contrato creado con POST /contracts puede confirmarse con CONFIRM_CONTRACT y pasa a PENDING_INSTALLATION (flujo de punta a punta de JOB-003 a JOB-002)."
@@ -131,21 +132,25 @@ jobs:
     name: Incidencias y clasificador de IA bajo control humano
     owner: Fernando
     priority: Must
-    requirements: [FR-DOM-013, FR-DOM-014, NFR-AI-001, NFR-AUDIT-001]
+    requirements: [FR-DOM-013, FR-DOM-014, FR-DOM-016, FR-DOM-017, NFR-AI-001, NFR-AUDIT-001]
     dependencies: [JOB-004]
     deliverables:
       - "POST /incidents (módulo incidents), con HTTP 404 si el servicio no existe."
       - "src/ai/classifyIncident.ts con salida validada con zod, cálculo y registro del coste por llamada, modelo haiku."
       - "Cola de revisión manual (estado MANUAL_REVIEW)."
       - "Endpoint de decisión del técnico (aceptar, modificar o rechazar) con registro de auditoría."
+      - "POST /incidents/:id/resolve: resolución de la incidencia por el técnico (OPEN o MANUAL_REVIEW a RESOLVED) con registro de auditoría."
     acceptance:
       - "POST /incidents con cliente y servicio existentes devuelve HTTP 201 y un incident_id opaco."
+      - "POST /incidents sobre un servicio CANCELLED devuelve HTTP 409 con code SERVICE_CANCELLED y no crea la incidencia (INV-9, @AC-TELCO-007)."
+      - "POST /incidents sobre un servicio inexistente devuelve HTTP 404 y no crea la incidencia (INV-9, @AC-TELCO-008)."
       - "Una sugerencia con confidence 0.55 deja la incidencia en MANUAL_REVIEW y no modifica ningún dato (INV-5, @AC-TELCO-004)."
       - "Una sugerencia con confidence >= 0.8 y esquema válido queda pendiente de validación del técnico y no se aplica sola."
       - "Una respuesta con JSON roto o fuera del esquema zod genera una incidencia en MANUAL_REVIEW sin lanzar excepción."
       - "El coste por llamada se calcula y se registra como métrica en cada clasificación."
       - "La decisión del técnico registra suggestion_id, identificador opaco del técnico, decisión y marca de tiempo (INV-6, @AC-TELCO-005)."
       - "Cada sugerencia y cada decisión se registra con modelo, identificadores opacos y marca de tiempo; 0 apariciones de PII en los logs."
+      - "POST /incidents/:id/resolve con technicianId sobre una incidencia OPEN o MANUAL_REVIEW devuelve HTTP 200 y la deja RESOLVED con resolvedBy y resolvedAt (INV-10, @AC-TELCO-009); sobre una RESOLVED devuelve HTTP 409 INCIDENT_ALREADY_RESOLVED (@AC-TELCO-010); inexistente, HTTP 404 (@AC-TELCO-011); sin technicianId, HTTP 400 (@AC-TELCO-012)."
       - "Los tests del clasificador corren con el SDK mockeado y consumen 0 tokens."
       - "src/incidents no importa src/ai por dentro; solo por su index.ts (ADR-001)."
 
@@ -153,7 +158,7 @@ jobs:
     name: Observabilidad mínima
     owner: Fernando
     priority: Should
-    requirements: [NFR-PERF-001, NFR-AUDIT-001]
+    requirements: [NFR-PERF-001, NFR-AUDIT-001, NFR-OPS-001]
     dependencies: [JOB-005]   # corre en paralelo a JOB-006
     deliverables:
       - "Instrumentación OpenTelemetry (trazas y métricas) en el código, alineada con la configuración heredada en ops/otel.yaml."
@@ -165,6 +170,7 @@ jobs:
       - "Cada alerta de ops/alerts.yml incluye una runbook_url que existe en el repo."
       - "Ningún archivo de ops/ cita un ID de requisito que no exista en specs/srs-telco.md."
       - "0 apariciones de PII en los logs JSON del flujo completo."
+      - "GET /metrics expone incident_manual_review_resolution_seconds (histograma agregado, bucket en 14400 s) y ops/slos.md define SLO-3 (95 % en < 4 h, 28 d) con su alerta (NFR-OPS-001, @AC-TELCO-013, @AC-TELCO-014)."
 
   - id: JOB-008
     name: Operación defendible (runbook + mini GameDay)

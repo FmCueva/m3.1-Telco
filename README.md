@@ -6,6 +6,8 @@ humana**. Construido siguiendo **Spec-Driven Development (SDD)**.
 
 > **La regla del bloque: sin especificación validada → no se implementa código.**
 
+> 📄 **Decisiones de diseño defendidas con datos:** [`DECISIONES.md`](./DECISIONES.md).
+
 **Este repo es tu punto de partida.** Trae ya montada toda la **infraestructura** (CI, Docker,
 observabilidad, scripts de gate y configuración); tú vas **construyendo el dominio** —la
 especificación, el código y los tests— paso a paso siguiendo los 8 vídeos y usando los prompts de

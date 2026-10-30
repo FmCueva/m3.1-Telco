@@ -34,13 +34,13 @@ Lee specs/spec-servicio.md (sección "Contratos de los endpoints") y escribe src
   · POST /customers              → alta (FR-CUST-001)
   · POST /customers/:id/kyc      → verificación KYC (FR-CUST-002)
   · GET  /customers/:id          → detalle + sus contratos (FR-CUST-003)
-  · POST /contracts              → 403 KYC_REQUIRED si el cliente no tiene KYC (INV-1);
-                                    409 DEBT_OUTSTANDING si deuda > 0 (INV-4); si vale, 201 en DRAFT.
+  · POST /contracts              → 403 KYC_REQUIRED si el cliente no tiene KYC (INV-4);
+                                    409 DEBT_OUTSTANDING si deuda > 0 (INV-8); si vale, 201 en DRAFT.
   · GET  /contracts/:id          → detalle
   · POST /contracts/:id/events   → aplica transition(); 409 INVALID_TRANSITION si la transición no
                                     está en la tabla (INV-2) o el servicio está CANCELLED (INV-3);
                                     si es inválida, el estado NO cambia.
-  · POST /incidents              → 404 si el servicio no existe; 409 si está CANCELLED (INV-5);
+  · POST /incidents              → 404 si el servicio no existe; 409 SERVICE_CANCELLED si está CANCELLED (INV-9);
                                     si vale, incidencia en OPEN.
   · POST /incidents/:id/resolve  → resolución por el técnico (FR-INC-004).
 

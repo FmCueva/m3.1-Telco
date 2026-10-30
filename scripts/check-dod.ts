@@ -43,7 +43,10 @@ const checks: Array<{ name: string; run: () => boolean }> = [
   },
   {
     name: 'cobertura ≥ 80 %',
-    run: () => run('npx tsx scripts/coverage-gate.ts 80'),
+    // Genera su propio informe: en un checkout limpio (job dod) no hay coverage/ previo.
+    run: () =>
+      run('npm run test:unit -- --run --coverage') &&
+      run('npx tsx scripts/coverage-gate.ts 80'),
   },
 ];
 

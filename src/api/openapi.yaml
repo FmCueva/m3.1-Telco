@@ -1,0 +1,428 @@
+openapi: 3.1.0
+info:
+  title: TELCO API
+  version: 0.1.0
+  description: >-
+    Contrato HTTP del backend TELCO. Documentación: no se sirve en runtime.
+    Todo error 4xx/5xx usa el shape uniforme { code, message }.
+paths:
+  /healthz:
+    get:
+      summary: Comprobación de salud
+      responses:
+        '200':
+          description: El servicio está vivo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+  /customers:
+    post:
+      summary: Alta de cliente (queda con KYC PENDING)
+      description: >-
+        Crea un cliente con KYC PENDING y deuda 0. El KYC se registra en otro
+        endpoint.
+      responses:
+        '201':
+          description: Cliente creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+  /customers/{id}/kyc:
+    post:
+      summary: Registra el resultado de la verificación KYC
+      description: cliente verificado o rechazado. El cliente debe existir.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result: { type: string, enum: [VERIFIED, REJECTED] }
+      responses:
+        '200':
+          description: Cliente con el KYC actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /customers/{id}:
+    get:
+      summary: Detalle del cliente con sus contratos
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Cliente y sus contratos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Customer' }
+                  - type: object
+                    required: [contracts]
+                    properties:
+                      contracts:
+                        type: array
+                        items: { $ref: '#/components/schemas/ServiceContract' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contracts:
+    post:
+      summary: Contrata un servicio (nace en DRAFT)
+      description: >-
+        Crea un contrato en DRAFT para un cliente existente. El cliente debe
+        existir y tener KYC VERIFIED y deuda 0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, type]
+              properties:
+                customerId: { type: string, minLength: 1 }
+                type: { $ref: '#/components/schemas/ContractType' }
+      responses:
+        '201':
+          description: Contrato creado en DRAFT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El cliente tiene deuda pendiente (INV-8). code DEBT_OUTSTANDING
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { code: DEBT_OUTSTANDING, message: El cliente tiene deuda pendiente }
+        '403':
+          description: El cliente no tiene el KYC verificado (INV-4). code KYC_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { code: KYC_REQUIRED, message: El cliente no tiene el KYC verificado }
+  /contracts/{id}:
+    get:
+      summary: Detalle del contrato
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Contrato
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contracts/{id}/events:
+    post:
+      summary: Aplica un evento al contrato mediante transition(), evento sobre la máquina de estados.
+      description: >-
+        Aplica un evento al contrato mediante transition(). El contrato debe
+        existir. El evento debe ser válido según la tabla de transición de estados.
+        Una transición inválida devuelve error 409. Un contrato CANCELLED no puede recibir eventos (INV-3).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event]
+              properties:
+                event: { type: string, enum: [confirm, cancel] }
+      responses:
+        '200':
+          description: Transición aplicada, Contrato actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Transición fuera de la tabla (INV-2) o contrato CANCELLED (INV-3).
+            El estado no cambia. code INVALID_TRANSITION
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  code: INVALID_TRANSITION,
+                  message: 'Transición inválida: confirm desde ACTIVE',
+                }
+  /incidents:
+    post:
+      summary: Abre una incidencia sobre un servicio y la clasifica con IA
+      description: >-
+        Crea una incidencia para un contrato existente (no CANCELLED) y la clasifica
+        con IA. Confianza < 0.8 o salida inválida → MANUAL_REVIEW. Una sugerencia
+        válida deja la incidencia en OPEN con `suggestion`, pendiente del técnico.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractId, description]
+              properties:
+                contractId: { type: string, minLength: 1 }
+                description: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Incidencia creada (OPEN o MANUAL_REVIEW), con `suggestion` si la IA sugirió
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El servicio está CANCELLED (INV-9). code SERVICE_CANCELLED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { code: SERVICE_CANCELLED, message: El servicio está CANCELLED }
+    get:
+      summary: Lista incidencias, filtrable por estado (cola de revisión manual)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
+      responses:
+        '200':
+          description: Incidencias
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /incidents/{id}/resolve:
+    post:
+      summary: Resolución de la incidencia por el técnico
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [technicianId]
+              properties:
+                technicianId:
+                  { type: string, description: 'Identificador opaco (t-17)' }
+      responses:
+        '200':
+          description: Incidencia resuelta (status RESOLVED, resolvedBy, resolvedAt)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Incident' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La incidencia ya está resuelta (code INCIDENT_ALREADY_RESOLVED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /webhooks/installation:
+    post:
+      summary: Webhook del sistema de instalación (INSTALLATION_COMPLETED)
+      description: >-
+        Firma HMAC-SHA256 en hex de x-signature sobre el cuerpo crudo (NFR-SEC-001).
+        PENDING_INSTALLATION pasa a ACTIVE; desde otro estado, 409.
+      parameters:
+        - { in: header, name: x-signature, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractId]
+              properties:
+                contractId: { type: string }
+      responses:
+        '200':
+          description: Contrato en ACTIVE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Firma ausente o inválida (code INVALID_SIGNATURE); no altera ningún estado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El servicio no está en el estado de origen requerido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /webhooks/billing:
+    post:
+      summary: Webhook del sistema de facturación (PAYMENT_DEFAULT / PAYMENT_REGULARIZED)
+      description: >-
+        Misma firma que el webhook de instalación. PAYMENT_DEFAULT lleva ACTIVE a
+        SUSPENDED; PAYMENT_REGULARIZED lleva SUSPENDED a ACTIVE; fuera de origen, 409.
+      parameters:
+        - { in: header, name: x-signature, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractId, event]
+              properties:
+                contractId: { type: string }
+                event: { type: string, enum: [PAYMENT_DEFAULT, PAYMENT_REGULARIZED] }
+      responses:
+        '200':
+          description: Contrato actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceContract' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Firma ausente o inválida (code INVALID_SIGNATURE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El servicio no está en el estado de origen requerido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /metrics:
+    get:
+      summary: Métricas agregadas de supervisión humana (formato Prometheus)
+      description: >-
+        ai_acceptance_rate (ACCEPTED / total de decisiones; ausente sin decisiones),
+        ai_decisions_total y audit_log_completeness (NFR-AUDIT-001). Nunca por técnico.
+      responses:
+        '200':
+          description: Texto en formato de exposición de Prometheus
+          content:
+            text/plain:
+              schema: { type: string }
+  /suggestions/{id}/decision:
+    post:
+      summary: Decisión del técnico sobre una sugerencia de la IA (INV-6, AC-TELCO-005)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [technicianId, decision]
+              properties:
+                technicianId: { type: string, example: t-17 }
+                decision: { $ref: '#/components/schemas/SuggestionDecision' }
+      responses:
+        '201':
+          description: Decisión registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuggestionDecisionRecord' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La sugerencia ya tiene decisión (SUGGESTION_ALREADY_DECIDED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    ValidationError:
+      description: Cuerpo inválido. code VALIDATION_ERROR
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Recurso inexistente (CUSTOMER_NOT_FOUND, CONTRACT_NOT_FOUND, INCIDENT_NOT_FOUND)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    ContractType:
+      type: string
+      enum: [FIBER, MOBILE, PACK]
+    ServiceStatus:
+      type: string
+      enum: [DRAFT, PENDING_INSTALLATION, ACTIVE, SUSPENDED, CANCELLED]
+    ServiceEvent:
+      type: string
+      enum: [confirm, installationCompleted, paymentDefault, paymentRegularized, cancel]
+    Customer:
+      type: object
+      required: [id, status, outstandingDebt]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [PENDING, VERIFIED, REJECTED] }
+        outstandingDebt: { type: number, minimum: 0 }
+    ServiceContract:
+      type: object
+      required: [id, customerId, type, status]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        type: { $ref: '#/components/schemas/ContractType' }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+    SuggestionDecision:
+      type: string
+      enum: [ACCEPTED, MODIFIED, REJECTED]
+    SuggestionDecisionRecord:
+      type: object
+      required: [suggestionId, technicianId, decision, decidedAt]
+      properties:
+        suggestionId: { type: string }
+        technicianId: { type: string }
+        decision: { $ref: '#/components/schemas/SuggestionDecision' }
+        decidedAt: { type: string, format: date-time }
+    Incident:
+      type: object
+      required: [id, contractId, description, status]
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [OPEN, MANUAL_REVIEW, RESOLVED] }
+        resolvedBy: { type: string }
+        resolvedAt: { type: string, format: date-time }
+        suggestion:
+          type: object
+          description: Solo si la IA sugirió con confianza >= 0.8; pendiente del técnico
+          required: [suggestionId, category, confidence, suggestedResolution]
+          properties:
+            suggestionId: { type: string }
+            category: { type: string }
+            confidence: { type: number, minimum: 0, maximum: 1 }
+            suggestedResolution: { type: string, maxLength: 600 }
