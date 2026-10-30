@@ -12,3 +12,4 @@ migrations/
 # Ficheros existentes formateados con otro ancho: no se reformatean (regla del repo).
 src/domain/serviceTransitions.ts
 tests/unit/serviceTransitions.test.ts
+.vscode/
